@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(docker build:*)",
+      "Bash(docker manifest:*)",
+      "Bash(docker pull:*)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(docker images:*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(grep -n \"minio_secret_2024\\\\|pipeline_secret_2024\\\\|admin_secret_2024\\\\|root_secret_2024\" /Users/davidnguyen/PycharmProjects/E2E-Data-Pipeline/airflow/dags/*.py)",
+      "Bash(grep -n \"PythonOperator\\\\|python_operator\\\\|latest\" /Users/davidnguyen/PycharmProjects/E2E-Data-Pipeline/airflow/dags/*.py /Users/davidnguyen/PycharmProjects/E2E-Data-Pipeline/docker-compose.yaml)",
+      "Bash(grep -n \"continue-on-error\" /Users/davidnguyen/PycharmProjects/E2E-Data-Pipeline/.github/workflows/*.yml)",
+      "Bash(xargs cat:*)",
+      "Bash(grep -v \"^--$\")",
+      "Bash(isort:*)",
+      "Bash(prettier --write \"index.html\" \"packages/*.css\" \"packages/*.js\" \"sample_dotnet_backend/appsettings.json\" \"sample_dotnet_backend/appsettings.Production.json\" --print-width 120 --tab-width 2)",
+      "Bash(grep -n \"image:\" kubernetes/*.yaml)",
+      "Bash(grep -h \"aws_iam_role\\\\|aws_iam_policy\\\\|subnet-\\\\|vpc-\\\\|security_group\" /Users/davidnguyen/PycharmProjects/E2E-Data-Pipeline/terraform/*.tf)",
+      "Bash(grep -nE \"\\(CHANGE_ME|myrepo|yourdomain|TODO|FIXME|Replace with\\)\" /Users/davidnguyen/PycharmProjects/E2E-Data-Pipeline/terraform/*.tf /Users/davidnguyen/PycharmProjects/E2E-Data-Pipeline/kubernetes/*.yaml)",
+      "Bash(grep \"aws_iam_role\\\\|aws_iam_policy\" /Users/davidnguyen/PycharmProjects/E2E-Data-Pipeline/terraform/*.tf)",
+      "Bash(xargs -I {} basename {})",
+      "Bash(chmod:*)",
+      "Bash(flake8:*)",
+      "Bash(black --check --line-length 120 airflow/ spark/ kafka/ storage/ governance/ ml/ monitoring/)",
+      "Bash(black --line-length 120 airflow/ spark/ kafka/ storage/ governance/ ml/ monitoring/ bi_dashboards/ great_expectations/ snowflake/ tests/ serve_wiki.py)",
+      "Bash(prettier --write \"index.html\" \"packages/*.css\" \"packages/*.js\" \"sample_dotnet_backend/appsettings*.json\")",
+      "Bash(make format:*)",
+      "Skill(commit-commands:commit-push-pr)",
+      "Bash(git checkout:*)"
+    ]
+  }
+}
