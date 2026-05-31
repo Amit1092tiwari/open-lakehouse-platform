@@ -1,0 +1,5 @@
+2026-05-31 21:07:44,343 - __main__ - INFO - Agent initialized. CSV file path: C:\Users\amitt\OneDrive\Documents\github\Datapipeline\data\nifty50_data.csv
+2026-05-31 21:07:44,343 - __main__ - INFO - ============================================================
+2026-05-31 21:07:44,344 - __main__ - INFO - Starting Nifty 50 data ingestion...
+2026-05-31 21:07:44,344 - __main__ - INFO - ============================================================
+2026-05-31 21:07:55,522 - __main__ - ERROR - Network error: <urlopen error [Errno 11001] getaddrinfo failed>
