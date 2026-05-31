@@ -274,5 +274,5 @@ jobs:
         
     - name: Run Nifty Agent script
       run: |
-        python agents/nifty50_agent.py once
+        python agents\nifty50_agent.py once
         echo "basic nifty agent ingestion pipeline checks passed successfully!"
