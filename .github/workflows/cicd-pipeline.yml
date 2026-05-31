@@ -65,7 +65,7 @@ on:
   #      run: python -m pytest tests/ -v --tb=short
  
  # 4. MANUAL DISPATCH
-workflow_dispatch:
+#workflow_dispatch:
   #inputs:
   #  run_mode: [test, once, continuous]
   #  frequency: [every_min, every_5_min, hourly, daily]
