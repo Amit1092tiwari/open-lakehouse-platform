@@ -269,10 +269,10 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install -r agents\requirements.txt
+        python -m pip install -r agents/requirements.txt
         
         
     - name: Run Nifty Agent script
       run: |
-        python agents\nifty50_agent.py once
+        python agents/nifty50_agent.py once
         echo "basic nifty agent ingestion pipeline checks passed successfully!"
