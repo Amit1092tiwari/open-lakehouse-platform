@@ -1,3 +1,9 @@
+"""
+Batch Ingestion DAG.
+
+Orchestrates: MySQL Extraction -> Data Quality Validation -> MinIO S3 Stage -> Spark Processing -> PostgreSQL Bulk Loading.
+"""
+
 import logging
 import os
 from datetime import datetime, timedelta
@@ -35,7 +41,7 @@ def extract_data_from_mysql(**kwargs):
     """Extract batch data from MySQL orders table."""
     logger.info("Extracting data from MySQL...")
     mysql_hook = MySqlHook(mysql_conn_id="mysql_default")
-    df = mysql_hook.get_pandas_df("SELECT * FROM orders")
+    df = mysql_hook.get_pandas_df("SELECT order_id, customer_id, amount, created_at FROM orders")
     df.to_csv("/tmp/orders.csv", index=False)
     logger.info("Extracted %d records from MySQL.", len(df))
     return len(df)
@@ -43,7 +49,7 @@ def extract_data_from_mysql(**kwargs):
 
 def validate_data_with_ge(**kwargs):
     """Validate extracted data with Great Expectations."""
-    logger.info("Running Great Expectations validation...")
+    logger.info("Running Great Expectations validation on raw extract...")
     df = pd.read_csv("/tmp/orders.csv")
     ge_df = ge.from_pandas(df)
 
@@ -80,13 +86,13 @@ def load_to_minio(**kwargs):
 
 
 def load_to_postgres(**kwargs):
-    """Load transformed data into PostgreSQL."""
-    logger.info("Loading data into PostgreSQL...")
+    """Load transformed data into PostgreSQL using high-throughput bulk insert."""
+    logger.info("Loading transformed data into PostgreSQL...")
     pg_hook = PostgresHook(postgres_conn_id="postgres_default")
 
     pg_hook.run("""
         CREATE TABLE IF NOT EXISTS orders_transformed (
-            order_id INT,
+            order_id INT PRIMARY KEY,
             customer_id INT,
             amount DECIMAL(10,2),
             processed_timestamp TIMESTAMP
@@ -95,30 +101,38 @@ def load_to_postgres(**kwargs):
     pg_hook.run("TRUNCATE TABLE orders_transformed")
 
     df = pd.read_csv("/tmp/transformed_orders.csv")
-    rows_loaded = 0
-    for _, row in df.iterrows():
-        pg_hook.run(
-            """INSERT INTO orders_transformed(order_id, customer_id, amount, processed_timestamp)
-               VALUES (%s, %s, %s, %s)""",
-            parameters=(
-                row["order_id"],
-                row["customer_id"],
-                row["amount"],
-                row["processed_timestamp"],
-            ),
-        )
-        rows_loaded += 1
+    if df.empty:
+        logger.warning("No records found to load into PostgreSQL.")
+        return 0
 
-    logger.info("Loaded %d records into PostgreSQL.", rows_loaded)
+    records = [
+        (
+            row["order_id"],
+            row["customer_id"],
+            row["amount"],
+            row["processed_timestamp"],
+        )
+        for _, row in df.iterrows()
+    ]
+
+    # High-performance bulk insert instead of individual row queries
+    pg_hook.insert_rows(
+        table="orders_transformed",
+        rows=records,
+        target_fields=["order_id", "customer_id", "amount", "processed_timestamp"],
+        commit_every=5000,
+    )
+    logger.info("Bulk loaded %d records into PostgreSQL orders_transformed.", len(records))
+    return len(records)
 
 
 with DAG(
     dag_id="batch_ingestion_dag",
     default_args=default_args,
-    description="Batch ETL: MySQL -> Validation -> MinIO -> Spark -> PostgreSQL",
+    description="Batch ETL: MySQL -> Validation -> MinIO -> Spark -> PostgreSQL Bulk Load",
     schedule="@daily",
     catchup=False,
-    tags=["batch", "etl"],
+    tags=["batch", "etl", "production"],
 ) as dag:
     extract_task = PythonOperator(
         task_id="extract_mysql",
