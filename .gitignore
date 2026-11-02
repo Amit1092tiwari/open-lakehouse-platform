@@ -26,8 +26,32 @@ build/
 .DS_Store
 Thumbs.db
 
-# Docker
+# Docker & Logs
 airflow/logs/
+logs/
+*.log
+
+# .NET / C#
+bin/
+obj/
+*.nupkg
+*.user
+*.suo
+.vs/
+sample_dotnet_backend/NuGet.config
+sample_dotnet_backend/publish_nuget.sh
+
+# Legacy / Scaffolding Scripts
+api.sh
+data_pipeline_setup.sh
+
+# Local Assistant / AI Config
+.claude/
+
+# Embedded & Local Storage
+*.duckdb
+*.duckdb.wal
+.ipynb_checkpoints/
 
 # Terraform state
 terraform/.terraform/
