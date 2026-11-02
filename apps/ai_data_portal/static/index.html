@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enterprise Data Platform | AI & Executive Portal</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js for analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Ambient Background Glows -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+
+  <!-- Header & Navigation -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand-badge">
+        <span class="brand-icon">⚡</span>
+        <div class="brand-text">
+          <span class="brand-title">NEXUS DATA PLATFORM</span>
+          <span class="brand-subtitle">AI & Cloud Analytics Portal</span>
+        </div>
+      </div>
+      <div class="system-status-pill">
+        <span class="pulse-dot"></span>
+        <span id="system-status-text">PIPELINE OPERATIONAL</span>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs" role="tablist">
+      <button class="tab-btn active" data-tab="dashboard" id="tab-btn-dashboard">
+        <span class="tab-icon">📊</span> Executive Dashboard
+      </button>
+      <button class="tab-btn" data-tab="sql-chat" id="tab-btn-sql">
+        <span class="tab-icon">💬</span> Chat with Warehouse (SQL)
+      </button>
+      <button class="tab-btn" data-tab="rag-chat" id="tab-btn-rag">
+        <span class="tab-icon">🧠</span> AI Vector RAG Assistant
+      </button>
+      <button class="tab-btn" data-tab="telemetry" id="tab-btn-telemetry">
+        <span class="tab-icon">🛡️</span> FinOps & Telemetry
+      </button>
+    </nav>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="main-container">
+    
+    <!-- ==================== TAB 1: EXECUTIVE DASHBOARD ==================== -->
+    <section id="tab-dashboard" class="tab-view active">
+      <!-- KPI Cards Row -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span class="kpi-title">NET REALIZED REVENUE</span>
+            <span class="kpi-badge badge-green">+14.2% DoD</span>
+          </div>
+          <div class="kpi-value" id="kpi-revenue">$29,610.00</div>
+          <div class="kpi-footer">From Gold Mart: <code>fct_daily_customer_orders</code></div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span class="kpi-title">PROCESSED TRANSACTIONS</span>
+            <span class="kpi-badge badge-blue">Batch + Stream</span>
+          </div>
+          <div class="kpi-value" id="kpi-orders">10 Orders</div>
+          <div class="kpi-footer">Snappy Parquet in MinIO Lakehouse</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span class="kpi-title">CONFORMED CUSTOMERS</span>
+            <span class="kpi-badge badge-purple">Loyalty Clustered</span>
+          </div>
+          <div class="kpi-value" id="kpi-customers">6 Enterprise</div>
+          <div class="kpi-footer">From Dimension: <code>dim_customers</code></div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span class="kpi-title">SENSOR ANOMALIES (24H)</span>
+            <span class="kpi-badge badge-amber">Threshold &gt; 70.0</span>
+          </div>
+          <div class="kpi-value" id="kpi-anomalies">3 Events</div>
+          <div class="kpi-footer">Real-time Kafka Stream Alerting</div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="charts-grid">
+        <div class="glass-panel chart-panel">
+          <div class="panel-header">
+            <h3>📈 Daily Revenue Trend (Gold Fact Mart)</h3>
+            <span class="panel-tag">USD / Day</span>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="revenueChart"></canvas>
+          </div>
+        </div>
+
+        <div class="glass-panel chart-panel">
+          <div class="panel-header">
+            <h3>👑 Customer Loyalty Tiers (LTV)</h3>
+            <span class="panel-tag">dim_customers</span>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="loyaltyChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time Stream Event Ticker -->
+      <div class="glass-panel stream-panel">
+        <div class="panel-header">
+          <h3>⚡ Real-Time Streaming Ingestion & Anomaly Monitor</h3>
+          <span class="pulse-badge">LIVE KAFKA CONSUMER</span>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Event ID</th>
+                <th>Device ID</th>
+                <th>Reading Value</th>
+                <th>Threshold</th>
+                <th>Detection Timestamp</th>
+                <th>Severity</th>
+              </tr>
+            </thead>
+            <tbody id="stream-anomalies-tbody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 2: CHAT WITH WAREHOUSE (NL-to-SQL) ==================== -->
+    <section id="tab-sql-chat" class="tab-view">
+      <div class="chat-layout">
+        <!-- Sidebar with Presets -->
+        <aside class="glass-panel chat-sidebar">
+          <h3>💡 Instant NL-to-SQL Prompts</h3>
+          <p class="sidebar-subtext">Click any query chip to test the Medallion Gold marts:</p>
+          <div class="prompt-chips">
+            <button class="chip" data-query="Show top 5 customers by lifetime realized revenue">
+              🏆 Top 5 Customers by Revenue
+            </button>
+            <button class="chip" data-query="What is the customer count and revenue breakdown by loyalty tier?">
+              👑 Loyalty Tier Segmentation
+            </button>
+            <button class="chip" data-query="List recent sensor anomalies with reading value greater than 80">
+              🚨 Sensor Anomalies &gt; 80
+            </button>
+            <button class="chip" data-query="Show recent orders with value tier and realized revenue">
+              📦 Recent Ingested Orders
+            </button>
+          </div>
+
+          <div class="schema-hint-box">
+            <h4>Connected Warehouse Schemas:</h4>
+            <ul>
+              <li><code>analytics.fct_daily_customer_orders</code></li>
+              <li><code>analytics.dim_customers</code></li>
+              <li><code>analytics.fact_sensor_readings</code></li>
+            </ul>
+          </div>
+        </aside>
+
+        <!-- Main Query Console -->
+        <div class="glass-panel query-console">
+          <div class="panel-header">
+            <h3>💬 Natural Language to Warehouse SQL Engine</h3>
+            <span class="finops-badge">⚡ FinOps Partition-Pruning Enabled</span>
+          </div>
+
+          <form id="sql-query-form" class="query-form">
+            <div class="input-container">
+              <input type="text" id="sql-prompt-input" placeholder="Ask anything about your orders, customers, or sensors (e.g. 'Show top customers by spend')..." required />
+              <button type="submit" class="submit-btn" id="btn-submit-sql">
+                <span>Run Query</span> ↵
+              </button>
+            </div>
+          </form>
+
+          <!-- Result Area -->
+          <div id="sql-results-area" class="results-area hidden">
+            <!-- Execution Metrics Banner -->
+            <div class="query-metrics-banner">
+              <div class="metric-item">
+                <span class="m-label">Execution Latency</span>
+                <span class="m-val" id="sql-exec-time">14.2 ms</span>
+              </div>
+              <div class="metric-item">
+                <span class="m-label">Warehouse Scan</span>
+                <span class="m-val highlight-cyan" id="sql-bytes-scanned">0 KB (Pruned)</span>
+              </div>
+              <div class="metric-item">
+                <span class="m-label">Target Tier</span>
+                <span class="m-val" id="sql-target-mart">Medallion Gold</span>
+              </div>
+            </div>
+
+            <!-- Generated SQL Viewer -->
+            <div class="code-block-container">
+              <div class="code-header">
+                <span>GENERATED WAREHOUSE SQL</span>
+                <button class="copy-btn" id="btn-copy-sql">Copy SQL</button>
+              </div>
+              <pre><code id="sql-code-display" class="language-sql">-- SQL generated here</code></pre>
+            </div>
+
+            <!-- Result Data Table -->
+            <div class="table-responsive mt-3">
+              <table class="data-table" id="sql-data-table">
+                <thead id="sql-table-head"></thead>
+                <tbody id="sql-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 3: AI VECTOR RAG ASSISTANT ==================== -->
+    <section id="tab-rag-chat" class="tab-view">
+      <div class="chat-layout">
+        <!-- Sidebar with RAG Presets -->
+        <aside class="glass-panel chat-sidebar">
+          <h3>🧠 Vector Knowledge Base</h3>
+          <p class="sidebar-subtext">Semantic & BM25 hybrid search over pipeline runbooks:</p>
+          <div class="prompt-chips">
+            <button class="chip rag-chip" data-query="How do we prevent Spark driver OutOfMemory errors and tune shuffle partitions?">
+              ⚙️ Spark Driver OOM & Shuffle Tuning
+            </button>
+            <button class="chip rag-chip" data-query="What are the FinOps rules for Snowflake virtual warehouse auto-suspend?">
+              💰 Snowflake FinOps & Auto-Suspend
+            </button>
+            <button class="chip rag-chip" data-query="How does Reciprocal Rank Fusion combine dense and sparse lexical search?">
+              🔬 Hybrid Search & RRF Mechanics
+            </button>
+            <button class="chip rag-chip" data-query="What are the Medallion architecture standards for Bronze, Silver, and Gold?">
+              🥉 Medallion Data Modeling Rules
+            </button>
+            <button class="chip rag-chip" data-query="How do we handle Kafka backpressure in Structured Streaming?">
+              ⚡ Kafka Streaming Backpressure
+            </button>
+          </div>
+
+          <div class="schema-hint-box">
+            <h4>Vector Pipeline Specs:</h4>
+            <ul>
+              <li><strong>Embedding Dim</strong>: 128-dim normalized</li>
+              <li><strong>Chunking</strong>: 100 tokens / 15 overlap</li>
+              <li><strong>Algorithm</strong>: Dense Cosine + BM25 (RRF k=60)</li>
+            </ul>
+          </div>
+        </aside>
+
+        <!-- Main RAG Console -->
+        <div class="glass-panel query-console">
+          <div class="panel-header">
+            <h3>🤖 AI Engineering & Architecture Assistant</h3>
+            <span class="rag-badge">Hybrid RAG Engine (RRF)</span>
+          </div>
+
+          <form id="rag-query-form" class="query-form">
+            <div class="input-container">
+              <input type="text" id="rag-prompt-input" placeholder="Ask technical questions about pipeline architecture, FinOps, or Spark tuning..." required />
+              <button type="submit" class="submit-btn btn-purple" id="btn-submit-rag">
+                <span>Ask AI</span> ↵
+              </button>
+            </div>
+          </form>
+
+          <!-- RAG Results Container -->
+          <div id="rag-results-area" class="results-area hidden">
+            <!-- AI Answer Box -->
+            <div class="ai-answer-card">
+              <div class="ai-header">
+                <span class="ai-icon">✨</span>
+                <span class="ai-title">Synthesized Technical Answer</span>
+                <span class="search-time" id="rag-search-time">8.4 ms latency</span>
+              </div>
+              <div class="ai-body" id="rag-answer-body">
+                <!-- AI text -->
+              </div>
+            </div>
+
+            <!-- Citations & Chunk Cards -->
+            <h4 class="mt-4 mb-2">📚 Ranked Source Citations (Reciprocal Rank Fusion):</h4>
+            <div class="citations-grid" id="rag-citations-container">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 4: FINOPS & TELEMETRY ==================== -->
+    <section id="tab-telemetry" class="tab-view">
+      <div class="telemetry-grid">
+        <!-- Infrastructure Health Panel -->
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h3>🛡️ Pipeline Health & Component Observability</h3>
+            <span class="badge-green">ALL SYSTEMS OPERATIONAL</span>
+          </div>
+          <div class="component-list" id="component-health-list">
+            <!-- Rendered via JS -->
+          </div>
+        </div>
+
+        <!-- FinOps Warehouse Cost Optimizer -->
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h3>💰 Cloud Warehouse FinOps Breakdown</h3>
+            <span class="panel-tag">Snowflake / BigQuery</span>
+          </div>
+          <div class="finops-breakdown">
+            <div class="cost-stat-card">
+              <div class="cs-label">Projected Monthly Credits</div>
+              <div class="cs-value">453.0 Credits</div>
+              <div class="cs-cost">~$1,359.00 / month</div>
+            </div>
+            <div class="guardrail-checklist">
+              <h4>Active FinOps Policies:</h4>
+              <div class="check-item"><span class="check-icon">✓</span> <code>AUTO_SUSPEND = 60s</code> on ETL Warehouses</div>
+              <div class="check-item"><span class="check-icon">✓</span> Snappy-Compressed Parquet in Lakehouse (-65% S3 size)</div>
+              <div class="check-item"><span class="check-icon">✓</span> Partition Pruning on <code>order_date</code> & <code>customer_id</code></div>
+              <div class="check-item"><span class="check-icon">✓</span> Zero <code>SELECT *</code> queries in production Gold models</div>
+              <div class="check-item"><span class="check-icon">✓</span> 10s Micro-batch trigger on Kafka structured streaming</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

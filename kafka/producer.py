@@ -1,3 +1,7 @@
+"""
+Kafka Event Producer: Simulates real-time IoT sensor telemetry.
+"""
+
 import json
 import logging
 import os
@@ -36,7 +40,7 @@ def create_producer():
                 linger_ms=10,
                 batch_size=16384,
             )
-            logger.info("Connected to Kafka broker: %s", KAFKA_BROKER)
+            logger.info("[OUTPUT RECEIVED] Connected to Kafka broker: %s", KAFKA_BROKER)
             return producer
         except NoBrokersAvailable:
             logger.warning(
@@ -68,7 +72,7 @@ def create_kafka_topic(topic_name):
                 replication_factor=1,
             )
             admin_client.create_topics([topic])
-            logger.info("Created Kafka topic '%s'.", topic_name)
+            logger.info("[OUTPUT RECEIVED] Created Kafka topic '%s' (partitions=3, rf=1).", topic_name)
         else:
             logger.info("Kafka topic '%s' already exists.", topic_name)
 
@@ -91,10 +95,11 @@ def generate_event():
 
 def produce_messages():
     """Produce sensor messages to Kafka in batches."""
+    logger.info("[INPUT EXPECTED] Simulation parameters: Interval=%.1fs, BatchSize=%d, Broker=%s, Topic=%s", MESSAGE_FREQUENCY, BATCH_SIZE, KAFKA_BROKER, KAFKA_TOPIC)
     producer = create_producer()
     create_kafka_topic(KAFKA_TOPIC)
 
-    logger.info("Producing messages to topic: %s", KAFKA_TOPIC)
+    logger.info("[PROCESSING] Commencing event generation and streaming dispatch...")
     batch = []
     message_count = 0
 
@@ -104,15 +109,14 @@ def produce_messages():
             batch.append(event)
 
             if len(batch) >= BATCH_SIZE:
+                logger.info("[INPUT RECEIVED] Generated batch of %d sensor readings (Sample device_id: %s, value: %s)", len(batch), batch[0]["device_id"], batch[0]["reading_value"])
+                logger.info("[PROCESSING] Serializing batch of %d records to JSON bytes with gzip/batch compression...", len(batch))
+                logger.info("[OUTPUT EXPECTED] Destination: Kafka topic '%s' with acks='%s'", KAFKA_TOPIC, ACKS_MODE)
                 for msg in batch:
                     producer.send(KAFKA_TOPIC, msg)
                 producer.flush()
                 message_count += len(batch)
-                logger.info(
-                    "Sent batch of %d messages (total: %d).",
-                    len(batch),
-                    message_count,
-                )
+                logger.info("[OUTPUT RECEIVED] Flushed batch of %d messages to Kafka (Cumulative sent: %d).", len(batch), message_count)
                 batch.clear()
 
             time.sleep(MESSAGE_FREQUENCY)
@@ -128,7 +132,7 @@ def produce_messages():
             producer.flush()
             message_count += len(batch)
         producer.close()
-        logger.info("Producer shutdown. Total messages sent: %d", message_count)
+        logger.info("[OUTPUT RECEIVED] Producer gracefully shut down. Total events published: %d", message_count)
 
 
 if __name__ == "__main__":

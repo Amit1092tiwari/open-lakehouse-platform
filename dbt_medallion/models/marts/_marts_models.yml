@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: fct_daily_customer_orders
+    description: "Production incremental fact table representing cleansed transactions clustered by date and customer."
+    columns:
+      - name: order_hk
+        description: "Primary hash key for the transaction."
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: "Source order identifier."
+        tests:
+          - not_null
+      - name: order_amount
+        description: "Gross order amount in USD."
+        tests:
+          - not_null
+      - name: net_realized_revenue
+        description: "Settled revenue after excluding refunds/cancellations."
+        tests:
+          - not_null
+
+  - name: dim_customers
+    description: "Conformed customer dimension table with rolling lifetime value (LTV) metrics."
+    columns:
+      - name: customer_hk
+        description: "Primary hash surrogate key for customer dimension."
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: "Natural customer identifier."
+        tests:
+          - not_null
+          - unique
+      - name: customer_loyalty_segment
+        description: "LTV classification segment."
+        tests:
+          - accepted_values:
+              values: ['TIER_PLATINUM', 'TIER_GOLD', 'TIER_STANDARD']

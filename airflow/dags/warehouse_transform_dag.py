@@ -9,12 +9,14 @@ Flow: PostgreSQL (staging) → Snowflake (dimensions → facts → aggregations)
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from airflow.operators.python import PythonOperator
-from airflow.providers.postgres.hooks.postgres import PostgresHook
-
-from airflow import DAG
+try:
+    from airflow.operators.python import PythonOperator
+    from airflow import DAG
+    AIRFLOW_AVAILABLE = True
+except ImportError:
+    AIRFLOW_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -46,18 +48,20 @@ def _get_snowflake_conn():
 
 
 def _get_pg():
-    """Get PostgreSQL hook."""
+    """Get PostgreSQL hook (lazy import to allow lightweight parsing)."""
+    from airflow.providers.postgres.hooks.postgres import PostgresHook
     return PostgresHook(postgres_conn_id="postgres_default")
 
 
 def extract_and_stage_orders(**kwargs):
-    """Extract transformed orders from PostgreSQL and stage in Snowflake."""
+    """Extract transformed orders from PostgreSQL and stage in Snowflake/PostgreSQL warehouse."""
+    logger.info("[INPUT EXPECTED] Source: PostgreSQL table 'orders_transformed'")
     pg = _get_pg()
     df = pg.get_pandas_df("SELECT * FROM orders_transformed")
-    logger.info("Extracted %d orders from PostgreSQL.", len(df))
+    logger.info("[INPUT RECEIVED] Extracted %d orders from PostgreSQL.", len(df))
 
     if df.empty:
-        logger.warning("No orders to stage.")
+        logger.warning("[PROCESSING] No orders found to stage.")
         return 0
 
     if SNOWFLAKE_ENABLED:
@@ -65,17 +69,17 @@ def extract_and_stage_orders(**kwargs):
 
         conn = _get_snowflake_conn()
         try:
-            # Truncate staging table first
+            logger.info("[PROCESSING] Staging %d orders in Snowflake STAGING.STG_ORDERS...", len(df))
             conn.cursor().execute("TRUNCATE TABLE STAGING.STG_ORDERS")
             df.columns = [c.upper() for c in df.columns]
             if "LOADED_AT" not in df.columns:
-                df["LOADED_AT"] = datetime.utcnow()
+                df["LOADED_AT"] = datetime.now(timezone.utc)
             _, _, nrows, _ = write_pandas(conn, df, "STG_ORDERS", database="PIPELINE_DB", schema="STAGING")
-            logger.info("Staged %d orders in Snowflake.", nrows)
+            logger.info("[OUTPUT RECEIVED] Staged %d orders in Snowflake.", nrows)
         finally:
             conn.close()
     else:
-        logger.info("Snowflake disabled. Using PostgreSQL warehouse tables.")
+        logger.info("[PROCESSING] Staging orders in PostgreSQL open-source warehouse (dim_customers upsert)...")
         pg.run("""
             INSERT INTO dim_customers (customer_id, customer_name, join_date)
             SELECT DISTINCT ot.customer_id, 'Customer_' || ot.customer_id, MIN(ot.processed_timestamp)
@@ -86,6 +90,7 @@ def extract_and_stage_orders(**kwargs):
             GROUP BY ot.customer_id
             ON CONFLICT (customer_id) DO NOTHING
         """)
+        logger.info("[OUTPUT RECEIVED] Staged orders into PostgreSQL open-source warehouse.")
 
     return len(df)
 
@@ -113,7 +118,7 @@ def extract_and_stage_anomalies(**kwargs):
             conn.cursor().execute("TRUNCATE TABLE STAGING.STG_SENSOR_READINGS")
             df.columns = [c.upper() for c in df.columns]
             if "LOADED_AT" not in df.columns:
-                df["LOADED_AT"] = datetime.utcnow()
+                df["LOADED_AT"] = datetime.now(timezone.utc)
             _, _, nrows, _ = write_pandas(conn, df, "STG_SENSOR_READINGS", database="PIPELINE_DB", schema="STAGING")
             logger.info("Staged %d anomalies in Snowflake.", nrows)
         finally:
@@ -302,49 +307,50 @@ def log_pipeline_run(**kwargs):
     logger.info("Pipeline run logged (target: %s).", "Snowflake" if SNOWFLAKE_ENABLED else "PostgreSQL")
 
 
-with DAG(
-    dag_id="warehouse_transform_dag",
-    default_args=default_args,
-    description="Snowflake Data Warehouse ETL: Stage → Dimensions → Facts → Aggregations",
-    schedule="@hourly",
-    catchup=False,
-    tags=["warehouse", "etl", "snowflake", "star-schema"],
-) as dag:
+if AIRFLOW_AVAILABLE:
+    with DAG(
+        dag_id="warehouse_transform_dag",
+        default_args=default_args,
+        description="Snowflake Data Warehouse ETL: Stage → Dimensions → Facts → Aggregations",
+        schedule="@hourly",
+        catchup=False,
+        tags=["warehouse", "etl", "snowflake", "star-schema"],
+    ) as dag:
 
-    stage_orders = PythonOperator(
-        task_id="extract_and_stage_orders",
-        python_callable=extract_and_stage_orders,
-        execution_timeout=timedelta(minutes=15),
-    )
+        stage_orders = PythonOperator(
+            task_id="extract_and_stage_orders",
+            python_callable=extract_and_stage_orders,
+            execution_timeout=timedelta(minutes=15),
+        )
 
-    stage_anomalies = PythonOperator(
-        task_id="extract_and_stage_anomalies",
-        python_callable=extract_and_stage_anomalies,
-        execution_timeout=timedelta(minutes=15),
-    )
+        stage_anomalies = PythonOperator(
+            task_id="extract_and_stage_anomalies",
+            python_callable=extract_and_stage_anomalies,
+            execution_timeout=timedelta(minutes=15),
+        )
 
-    dims = PythonOperator(
-        task_id="load_dimensions",
-        python_callable=load_dimensions,
-        execution_timeout=timedelta(minutes=10),
-    )
+        dims = PythonOperator(
+            task_id="load_dimensions",
+            python_callable=load_dimensions,
+            execution_timeout=timedelta(minutes=10),
+        )
 
-    facts = PythonOperator(
-        task_id="load_facts",
-        python_callable=load_facts,
-        execution_timeout=timedelta(minutes=15),
-    )
+        facts = PythonOperator(
+            task_id="load_facts",
+            python_callable=load_facts,
+            execution_timeout=timedelta(minutes=15),
+        )
 
-    aggs = PythonOperator(
-        task_id="refresh_aggregations",
-        python_callable=refresh_aggregations,
-        execution_timeout=timedelta(minutes=10),
-    )
+        aggs = PythonOperator(
+            task_id="refresh_aggregations",
+            python_callable=refresh_aggregations,
+            execution_timeout=timedelta(minutes=10),
+        )
 
-    log_run = PythonOperator(
-        task_id="log_pipeline_run",
-        python_callable=log_pipeline_run,
-    )
+        log_run = PythonOperator(
+            task_id="log_pipeline_run",
+            python_callable=log_pipeline_run,
+        )
 
-    # Stage in parallel, then dimensions, facts, aggregations, log
-    [stage_orders, stage_anomalies] >> dims >> facts >> aggs >> log_run
+        # Stage in parallel, then dimensions, facts, aggregations, log
+        [stage_orders, stage_anomalies] >> dims >> facts >> aggs >> log_run

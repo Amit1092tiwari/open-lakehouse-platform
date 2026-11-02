@@ -1,13 +1,15 @@
 """
-Snowflake Data Warehouse Connector.
+Snowflake Data Warehouse Connector (with Open-Source Warehouse Fallback).
 
 Provides connection management, query execution, and data loading
-utilities for the Snowflake cloud data warehouse. Used by Airflow DAGs,
-the .NET API, and BI dashboard exports.
+utilities for the Snowflake cloud data warehouse. If Snowflake is unconfigured
+or unavailable, seamlessly routes operations to the 100% open-source
+warehouse layer (PostgreSQL OLAP Star Schema / DuckDB Columnar Lakehouse).
 """
 
 import logging
 import os
+import sys
 
 import pandas as pd
 
@@ -26,39 +28,75 @@ SNOWFLAKE_DATABASE = os.getenv("SNOWFLAKE_DATABASE", "PIPELINE_DB")
 SNOWFLAKE_SCHEMA = os.getenv("SNOWFLAKE_SCHEMA", "ANALYTICS")
 SNOWFLAKE_ROLE = os.getenv("SNOWFLAKE_ROLE", "PIPELINE_ROLE")
 
+# Open-source fallback flag (enabled by default when Snowflake is unconfigured)
+ALLOW_OPEN_SOURCE_FALLBACK = os.getenv("ALLOW_OPEN_SOURCE_FALLBACK", "true").lower() in ("true", "1", "yes")
+
+
+def is_snowflake_configured() -> bool:
+    """Check if Snowflake credentials are configured in the environment."""
+    return bool(SNOWFLAKE_ACCOUNT and SNOWFLAKE_USER)
+
 
 def get_connection():
-    """Create a Snowflake connection using snowflake-connector-python."""
-    import snowflake.connector
+    """
+    Create a Snowflake connection using snowflake-connector-python.
+    If Snowflake is not configured and fallback is enabled, connects to the
+    open-source PostgreSQL/DuckDB warehouse connector.
+    """
+    if is_snowflake_configured():
+        try:
+            import snowflake.connector
+            conn = snowflake.connector.connect(
+                account=SNOWFLAKE_ACCOUNT,
+                user=SNOWFLAKE_USER,
+                password=SNOWFLAKE_PASSWORD,
+                warehouse=SNOWFLAKE_WAREHOUSE,
+                database=SNOWFLAKE_DATABASE,
+                schema=SNOWFLAKE_SCHEMA,
+                role=SNOWFLAKE_ROLE,
+                login_timeout=30,
+                network_timeout=60,
+            )
+            logger.info(
+                "Connected to Snowflake: %s.%s.%s",
+                SNOWFLAKE_DATABASE,
+                SNOWFLAKE_SCHEMA,
+                SNOWFLAKE_WAREHOUSE,
+            )
+            return conn
+        except Exception as e:
+            logger.warning("Snowflake connection attempt failed: %s", e)
+            if not ALLOW_OPEN_SOURCE_FALLBACK:
+                raise
 
-    if not SNOWFLAKE_ACCOUNT or not SNOWFLAKE_USER:
-        raise RuntimeError(
-            "Snowflake not configured. Set SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, "
-            "SNOWFLAKE_PASSWORD environment variables."
-        )
+    if ALLOW_OPEN_SOURCE_FALLBACK:
+        logger.info("Snowflake unconfigured; using open-source warehouse (PostgreSQL / DuckDB).")
+        try:
+            from warehouse.warehouse_connector import get_connection as get_os_conn
+            return get_os_conn()
+        except ImportError:
+            # Fallback for direct script execution without PYTHONPATH
+            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+            from warehouse.warehouse_connector import get_connection as get_os_conn
+            return get_os_conn()
 
-    conn = snowflake.connector.connect(
-        account=SNOWFLAKE_ACCOUNT,
-        user=SNOWFLAKE_USER,
-        password=SNOWFLAKE_PASSWORD,
-        warehouse=SNOWFLAKE_WAREHOUSE,
-        database=SNOWFLAKE_DATABASE,
-        schema=SNOWFLAKE_SCHEMA,
-        role=SNOWFLAKE_ROLE,
-        login_timeout=30,
-        network_timeout=60,
+    raise RuntimeError(
+        "Snowflake not configured. Set SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, "
+        "SNOWFLAKE_PASSWORD environment variables or enable open-source warehouse."
     )
-    logger.info(
-        "Connected to Snowflake: %s.%s.%s",
-        SNOWFLAKE_DATABASE,
-        SNOWFLAKE_SCHEMA,
-        SNOWFLAKE_WAREHOUSE,
-    )
-    return conn
 
 
 def execute_sql(sql, params=None):
-    """Execute a SQL statement on Snowflake."""
+    """Execute a SQL statement on Snowflake (or open-source warehouse)."""
+    if not is_snowflake_configured() and ALLOW_OPEN_SOURCE_FALLBACK:
+        try:
+            from warehouse.warehouse_connector import execute_sql as os_execute_sql
+            return os_execute_sql(sql, params)
+        except ImportError:
+            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+            from warehouse.warehouse_connector import execute_sql as os_execute_sql
+            return os_execute_sql(sql, params)
+
     conn = get_connection()
     try:
         cursor = conn.cursor()
@@ -74,6 +112,15 @@ def execute_sql(sql, params=None):
 
 def execute_multi(sql_statements):
     """Execute multiple SQL statements in a single connection."""
+    if not is_snowflake_configured() and ALLOW_OPEN_SOURCE_FALLBACK:
+        try:
+            from warehouse.warehouse_connector import execute_multi as os_execute_multi
+            return os_execute_multi(sql_statements)
+        except ImportError:
+            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+            from warehouse.warehouse_connector import execute_multi as os_execute_multi
+            return os_execute_multi(sql_statements)
+
     conn = get_connection()
     try:
         cursor = conn.cursor()
@@ -92,6 +139,15 @@ def execute_multi(sql_statements):
 
 def query_to_dataframe(sql, params=None):
     """Execute a query and return results as a pandas DataFrame."""
+    if not is_snowflake_configured() and ALLOW_OPEN_SOURCE_FALLBACK:
+        try:
+            from warehouse.warehouse_connector import query_to_dataframe as os_query_to_df
+            return os_query_to_df(sql, params)
+        except ImportError:
+            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+            from warehouse.warehouse_connector import query_to_dataframe as os_query_to_df
+            return os_query_to_df(sql, params)
+
     conn = get_connection()
     try:
         df = pd.read_sql(sql, conn, params=params)
@@ -105,7 +161,16 @@ def query_to_dataframe(sql, params=None):
 
 
 def load_dataframe(df, table_name, database=None, schema=None, overwrite=False):
-    """Load a pandas DataFrame into a Snowflake table using write_pandas."""
+    """Load a pandas DataFrame into a Snowflake table using write_pandas, or open-source warehouse."""
+    if not is_snowflake_configured() and ALLOW_OPEN_SOURCE_FALLBACK:
+        try:
+            from warehouse.warehouse_connector import load_dataframe as os_load_df
+            return os_load_df(df, table_name=table_name, overwrite=overwrite)
+        except ImportError:
+            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+            from warehouse.warehouse_connector import load_dataframe as os_load_df
+            return os_load_df(df, table_name=table_name, overwrite=overwrite)
+
     from snowflake.connector.pandas_tools import write_pandas
 
     conn = get_connection()
@@ -136,7 +201,16 @@ def load_dataframe(df, table_name, database=None, schema=None, overwrite=False):
 
 
 def stage_and_copy(local_file_path, table_name, stage_name="PIPELINE_STAGE"):
-    """Upload a local file to a Snowflake stage and COPY INTO table."""
+    """Upload a local file to a Snowflake stage and COPY INTO table, or open-source staging copy."""
+    if not is_snowflake_configured() and ALLOW_OPEN_SOURCE_FALLBACK:
+        try:
+            from warehouse.warehouse_connector import stage_and_copy as os_stage_copy
+            return os_stage_copy(local_file_path, table_name)
+        except ImportError:
+            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+            from warehouse.warehouse_connector import stage_and_copy as os_stage_copy
+            return os_stage_copy(local_file_path, table_name)
+
     conn = get_connection()
     try:
         cursor = conn.cursor()
@@ -165,22 +239,35 @@ def stage_and_copy(local_file_path, table_name, stage_name="PIPELINE_STAGE"):
 
 
 def check_connection():
-    """Verify Snowflake connectivity. Returns True if connected."""
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT CURRENT_VERSION()")
-        version = cursor.fetchone()[0]
-        conn.close()
-        logger.info("Snowflake connected. Version: %s", version)
-        return True
-    except Exception as e:
-        logger.error("Snowflake connection check failed: %s", str(e))
-        return False
+    """Verify Snowflake connectivity. Returns True if connected, or True if open-source warehouse is healthy."""
+    if is_snowflake_configured():
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT CURRENT_VERSION()")
+            version = cursor.fetchone()[0]
+            conn.close()
+            logger.info("Snowflake connected. Version: %s", version)
+            return True
+        except Exception as e:
+            logger.error("Snowflake connection check failed: %s", str(e))
+            if not ALLOW_OPEN_SOURCE_FALLBACK:
+                return False
+
+    if ALLOW_OPEN_SOURCE_FALLBACK:
+        try:
+            from warehouse.warehouse_connector import check_connection as os_check
+            return os_check()
+        except ImportError:
+            sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+            from warehouse.warehouse_connector import check_connection as os_check
+            return os_check()
+
+    return False
 
 
 if __name__ == "__main__":
     if check_connection():
-        print("Snowflake connection successful.")
+        print("Warehouse connection successful.")
     else:
-        print("Snowflake connection failed. Check configuration.")
+        print("Warehouse connection failed. Check configuration.")

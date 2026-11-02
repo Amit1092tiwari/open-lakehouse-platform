@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -11,12 +12,14 @@ using Microsoft.Extensions.Options;
 using DataPipelineApi.Options;
 
 namespace DataPipelineApi.Services;
+
 public class DbService : IDbService
 {
     private static readonly Regex TableNameRegex = new("^[A-Za-z0-9_]+$", RegexOptions.Compiled);
 
     private readonly string _myCs, _pgCs;
     private readonly int _commandTimeout;
+
     public DbService(IOptions<DatabaseOptions> opt)
     {
         var cfg = opt.Value;
@@ -48,5 +51,13 @@ public class DbService : IDbService
         await using var conn = new NpgsqlConnection(_pgCs);
         var cmd = new CommandDefinition(sql, commandTimeout: _commandTimeout, cancellationToken: cancellationToken);
         await conn.ExecuteAsync(cmd);
+    }
+
+    public async Task<IReadOnlyList<IDictionary<string, object?>>> QueryPostgresAsync(string sql, object? param, CancellationToken cancellationToken)
+    {
+        await using var conn = new NpgsqlConnection(_pgCs);
+        var cmd = new CommandDefinition(sql, param, commandTimeout: _commandTimeout, cancellationToken: cancellationToken);
+        var rows = await conn.QueryAsync(cmd);
+        return rows.Select(r => (IDictionary<string, object?>)r).ToList();
     }
 }

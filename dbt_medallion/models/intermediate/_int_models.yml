@@ -1,0 +1,20 @@
+version: 2
+
+models:
+  - name: int_orders_enriched
+    description: "Conformed Silver intermediate orders model with deduplication, surrogate keys, and customer attribution."
+    columns:
+      - name: order_hk
+        description: "MD5 Surrogate Hash Key."
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: "Natural order identifier."
+        tests:
+          - not_null
+      - name: order_value_tier
+        description: "Customer segment bucket based on order monetary value."
+        tests:
+          - accepted_values:
+              values: ['HIGH_VALUE', 'MEDIUM_VALUE', 'STANDARD_VALUE']

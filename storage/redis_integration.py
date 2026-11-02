@@ -1,3 +1,7 @@
+"""
+Redis In-Memory Caching and Running Statistics Aggregator for Streaming Events.
+"""
+
 import json
 import logging
 import os
@@ -17,22 +21,66 @@ KAFKA_INPUT_TOPIC = os.getenv("KAFKA_TOPIC", "sensor_readings")
 KAFKA_OUTPUT_TOPIC = os.getenv("KAFKA_OUTPUT_TOPIC", "processed_readings")
 
 
+def process_reading(data, redis_client):
+    """Process a single sensor reading event, update Redis running stats and cache."""
+    if not isinstance(data, dict):
+        return None
+
+    device_id = data.get("device_id")
+    reading_value = data.get("reading_value")
+
+    if device_id is None or reading_value is None:
+        return None
+
+    try:
+        reading_val = float(reading_value)
+    except (ValueError, TypeError):
+        return None
+
+    # Cache latest reading in Redis
+    cache_key = f"device:{device_id}:latest"
+    redis_client.setex(cache_key, 3600, json.dumps(data))
+
+    # Track running stats
+    stats_key = f"device:{device_id}:stats"
+    redis_client.hincrby(stats_key, "count", 1)
+    redis_client.hincrbyfloat(stats_key, "total", reading_val)
+
+    count_val = redis_client.hget(stats_key, "count")
+    total_val = redis_client.hget(stats_key, "total")
+
+    count = int(count_val) if count_val is not None else 1
+    total = float(total_val) if total_val is not None else reading_val
+    avg_reading = total / count if count > 0 else reading_val
+
+    processed_data = {
+        "device_id": device_id,
+        "reading_value": reading_val,
+        "avg_reading": round(avg_reading, 4),
+        "message_count": count,
+    }
+
+    redis_client.lpush("processed_queue", json.dumps(processed_data))
+    return processed_data
+
+
 def process_streaming_data():
     """Consume Kafka sensor readings, cache in Redis, and forward processed data."""
     import redis
-
     from kafka import KafkaConsumer, KafkaProducer
+    from kafka.errors import NoBrokersAvailable
+
+    logger.info("[INPUT EXPECTED] Source: Kafka topic '%s' | Schema: {device_id, reading_value}", KAFKA_INPUT_TOPIC)
+    logger.info("[OUTPUT EXPECTED] Redis Cache: keys 'device:{id}:latest', 'device:{id}:stats' & Forward Topic: '%s'", KAFKA_OUTPUT_TOPIC)
 
     redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_responses=True)
 
     try:
         redis_client.ping()
-        logger.info("Connected to Redis at %s:%d", REDIS_HOST, REDIS_PORT)
+        logger.info("[OUTPUT RECEIVED] Connected to Redis at %s:%d", REDIS_HOST, REDIS_PORT)
     except redis.ConnectionError:
         logger.error("Failed to connect to Redis.")
         sys.exit(1)
-
-    from kafka.errors import NoBrokersAvailable
 
     try:
         consumer = KafkaConsumer(
@@ -56,47 +104,16 @@ def process_streaming_data():
         logger.error("Kafka producer cannot connect to %s", KAFKA_BROKER)
         sys.exit(1)
 
-    logger.info(
-        "Processing data from '%s' -> Redis -> '%s'",
-        KAFKA_INPUT_TOPIC,
-        KAFKA_OUTPUT_TOPIC,
-    )
-    messages_processed = 0
-
+    logger.info("[PROCESSING] Commencing streaming processing, Redis cache invalidation, and statistics computation...")
+    count = 0
     for message in consumer:
-        data = message.value
-        device_id = data.get("device_id")
-        reading_value = data.get("reading_value")
-
-        if device_id is None or reading_value is None:
-            continue
-
-        # Cache latest reading in Redis
-        cache_key = f"device:{device_id}:latest"
-        redis_client.setex(cache_key, 3600, json.dumps(data))
-
-        # Track running stats
-        stats_key = f"device:{device_id}:stats"
-        redis_client.hincrby(stats_key, "count", 1)
-        redis_client.hincrbyfloat(stats_key, "total", reading_value)
-
-        count = int(redis_client.hget(stats_key, "count") or 1)
-        total = float(redis_client.hget(stats_key, "total") or reading_value)
-        avg_reading = total / count
-
-        processed_data = {
-            "device_id": device_id,
-            "reading_value": reading_value,
-            "avg_reading": round(avg_reading, 4),
-            "message_count": count,
-        }
-
-        redis_client.lpush("processed_queue", json.dumps(processed_data))
-        producer.send(KAFKA_OUTPUT_TOPIC, processed_data)
-        messages_processed += 1
-
-        if messages_processed % 100 == 0:
-            logger.info("Processed %d messages.", messages_processed)
+        logger.debug("[INPUT RECEIVED] Ingested message from topic '%s'", KAFKA_INPUT_TOPIC)
+        result = process_reading(message.value, redis_client)
+        if result:
+            producer.send(KAFKA_OUTPUT_TOPIC, result)
+            count += 1
+            if count % 100 == 0:
+                logger.info("[OUTPUT RECEIVED] Processed %d messages: Cached stats in Redis and forwarded to '%s'.", count, KAFKA_OUTPUT_TOPIC)
 
 
 if __name__ == "__main__":

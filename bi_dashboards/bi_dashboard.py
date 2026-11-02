@@ -1,10 +1,14 @@
 """
 BI Dashboard Integration - Export warehouse data to BI platforms.
 
-Queries the Snowflake data warehouse (or PostgreSQL fallback) and uploads
-aggregated data to Tableau, Looker, and Power BI for business analytics.
+Queries the open-source PostgreSQL/DuckDB data warehouse (or Snowflake if configured)
+and exports datasets and visualization specifications to:
+1. Apache Superset (Premier Open-Source BI & Semantic Layer - Apache 2.0)
+2. Grafana (Open-Source Metrics, Analytics, and Real-time Dashboards - AGPLv3)
+3. Commercial BI fallbacks (Tableau, Looker, Power BI)
 """
 
+import json
 import logging
 import os
 import sys
@@ -17,18 +21,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Snowflake Configuration
+# Snowflake Configuration (Optional Commercial Cloud Warehouse)
 SNOWFLAKE_ACCOUNT = os.getenv("SNOWFLAKE_ACCOUNT", "")
 SNOWFLAKE_ENABLED = bool(SNOWFLAKE_ACCOUNT)
 
-# PostgreSQL fallback
-DB_HOST = os.getenv("DB_HOST", "postgres")
-DB_PORT = os.getenv("DB_PORT", "5432")
+# Open-Source PostgreSQL Warehouse (Default)
+DB_HOST = os.getenv("DB_HOST", os.getenv("POSTGRES_HOST", "postgres"))
+DB_PORT = os.getenv("DB_PORT", os.getenv("POSTGRES_PORT", "5432"))
 DB_NAME = os.getenv("POSTGRES_DB", "processed_db")
 DB_USER = os.getenv("POSTGRES_USER", "pipeline_user")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD", "pipeline_secret_2024")
 
-# BI Tool configs
+# Open-Source BI Tool configs
+SUPERSET_URL = os.getenv("SUPERSET_URL", "http://superset:8088")
+GRAFANA_URL = os.getenv("GRAFANA_URL", "http://grafana:3000")
+GRAFANA_API_KEY = os.getenv("GRAFANA_API_KEY", "")
+
+# Commercial BI Tool configs (Legacy / Optional)
 TABLEAU_SERVER = os.getenv("TABLEAU_SERVER", "")
 LOOKER_API_URL = os.getenv("LOOKER_API_URL", "")
 POWER_BI_WORKSPACE_ID = os.getenv("POWER_BI_WORKSPACE_ID", "")
@@ -100,7 +109,7 @@ SNOWFLAKE_QUERIES = {
     """,
 }
 
-# PostgreSQL fallback queries (lowercase)
+# PostgreSQL open-source warehouse queries (lowercase)
 PG_QUERIES = {
     "daily_orders_summary": """
         SELECT dd.full_date, dd.day_name, dd.month_name, dd.quarter, dd.year,
@@ -163,7 +172,7 @@ def get_snowflake_engine():
 
 
 def get_postgres_engine():
-    """Create SQLAlchemy engine for PostgreSQL fallback."""
+    """Create SQLAlchemy engine for PostgreSQL open-source warehouse."""
     from sqlalchemy import create_engine
 
     url = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
@@ -171,30 +180,209 @@ def get_postgres_engine():
 
 
 def export_warehouse_data():
-    """Export warehouse queries to CSV. Uses Snowflake if configured, else PostgreSQL."""
+    """Export warehouse queries to CSV. Uses Snowflake if configured, else PostgreSQL open-source warehouse."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    logger.info("[INPUT EXPECTED] Source warehouse: %s | Queries: %s", "Snowflake" if SNOWFLAKE_ENABLED else "PostgreSQL Open-Source Warehouse", list(PG_QUERIES.keys()))
 
     if SNOWFLAKE_ENABLED:
-        logger.info("Querying Snowflake data warehouse...")
+        logger.info("[PROCESSING] Querying Snowflake data warehouse...")
         engine = get_snowflake_engine()
         queries = SNOWFLAKE_QUERIES
     else:
-        logger.info("Snowflake not configured. Using PostgreSQL fallback...")
+        logger.info("[PROCESSING] Using PostgreSQL open-source warehouse...")
         engine = get_postgres_engine()
         queries = PG_QUERIES
 
     for name, query in queries.items():
         try:
+            logger.info("[PROCESSING] Executing warehouse analytical query for '%s'...", name)
             df = pd.read_sql(query, con=engine)
+            logger.info("[INPUT RECEIVED] Query '%s' returned %d records.", name, len(df))
             filepath = os.path.join(OUTPUT_DIR, f"{name}.csv")
+            logger.info("[OUTPUT EXPECTED] Destination CSV: %s", filepath)
             df.to_csv(filepath, index=False)
-            logger.info("Exported %s: %d rows -> %s", name, len(df), filepath)
+            logger.info("[OUTPUT RECEIVED] Exported %s: %d rows -> %s", name, len(df), filepath)
         except Exception as e:
             logger.error("Failed to export %s: %s", name, e)
 
 
+def export_to_apache_superset(output_dir: str = OUTPUT_DIR) -> str:
+    """
+    Generate dataset definitions and dashboard specifications for Apache Superset (Open Source BI).
+    
+    Creates a declarative JSON export that can be imported directly into Superset via CLI or API.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    logger.info("[INPUT EXPECTED] Open-source semantic layer metrics & dataset specifications.")
+    logger.info("[PROCESSING] Generating declarative dataset definitions and chart slice specs for Apache Superset...")
+    superset_config = {
+        "version": "1.0.0",
+        "databases": [
+            {
+                "database_name": "OpenSource_PostgreSQL_Warehouse",
+                "sqlalchemy_uri": f"postgresql://{DB_USER}:XXXXXXXX@{DB_HOST}:{DB_PORT}/{DB_NAME}",
+                "tables": [
+                    {
+                        "table_name": "agg_daily_orders",
+                        "schema": "public",
+                        "metrics": [
+                            {"metric_name": "total_revenue", "expression": "SUM(total_revenue)"},
+                            {"metric_name": "total_orders", "expression": "SUM(total_orders)"},
+                            {"metric_name": "avg_order_value", "expression": "AVG(avg_order_value)"},
+                        ],
+                    },
+                    {
+                        "table_name": "fact_orders",
+                        "schema": "public",
+                        "metrics": [
+                            {"metric_name": "net_amount", "expression": "SUM(net_amount)"},
+                            {"metric_name": "order_count", "expression": "COUNT(order_key)"},
+                        ],
+                    },
+                    {
+                        "table_name": "fact_sensor_readings",
+                        "schema": "public",
+                        "metrics": [
+                            {"metric_name": "anomalies", "expression": "SUM(CASE WHEN is_anomaly THEN 1 ELSE 0 END)"},
+                            {"metric_name": "avg_reading", "expression": "AVG(reading_value)"},
+                        ],
+                    },
+                ],
+            }
+        ],
+        "dashboards": [
+            {
+                "dashboard_title": "Enterprise Data Platform Executive BI",
+                "slices": [
+                    "Daily Revenue Trend",
+                    "Customer Lifetime Value by Segment",
+                    "IoT Sensor Anomaly Detection Distribution",
+                    "Airflow Pipeline Execution SLA",
+                ],
+            }
+        ],
+    }
+
+    filepath = os.path.join(output_dir, "apache_superset_datasources.json")
+    logger.info("[OUTPUT EXPECTED] Destination file: %s", filepath)
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(superset_config, f, indent=2)
+    logger.info("[OUTPUT RECEIVED] Exported Apache Superset open-source BI metadata: %s", filepath)
+    return filepath
+
+
+def export_to_grafana(output_dir: str = OUTPUT_DIR) -> str:
+    """
+    Generate Grafana dashboard JSON models for operational and business analytics.
+    
+    Can be loaded directly into Grafana (running on port 3000 in docker-compose).
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    logger.info("[INPUT EXPECTED] Operational and BI SQL panel queries for PostgreSQL warehouse.")
+    logger.info("[PROCESSING] Constructing Grafana dashboard model with revenue, order, anomaly, and SLA panels...")
+    grafana_dashboard = {
+        "dashboard": {
+            "id": None,
+            "title": "Business Intelligence & Platform Performance",
+            "tags": ["datapipeline", "analytics", "open-source", "postgres"],
+            "timezone": "browser",
+            "panels": [
+                {
+                    "title": "Total Revenue (YTD)",
+                    "type": "stat",
+                    "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+                    "targets": [
+                        {
+                            "rawSql": "SELECT COALESCE(SUM(total_revenue), 0) FROM agg_daily_orders;",
+                            "format": "table",
+                        }
+                    ],
+                },
+                {
+                    "title": "Total Orders",
+                    "type": "stat",
+                    "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+                    "targets": [
+                        {
+                            "rawSql": "SELECT COALESCE(SUM(total_orders), 0) FROM agg_daily_orders;",
+                            "format": "table",
+                        }
+                    ],
+                },
+                {
+                    "title": "IoT Active Anomalies (Last 24h)",
+                    "type": "stat",
+                    "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+                    "targets": [
+                        {
+                            "rawSql": "SELECT COUNT(*) FROM fact_sensor_readings WHERE is_anomaly = TRUE AND reading_timestamp >= NOW() - INTERVAL '24 hours';",
+                            "format": "table",
+                        }
+                    ],
+                },
+                {
+                    "title": "Pipeline Success Rate",
+                    "type": "gauge",
+                    "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+                    "targets": [
+                        {
+                            "rawSql": "SELECT (COUNT(CASE WHEN status='success' THEN 1 END)::float / NULLIF(COUNT(*), 0)) * 100 FROM fact_pipeline_runs;",
+                            "format": "table",
+                        }
+                    ],
+                },
+                {
+                    "title": "Daily Order Revenue Trend",
+                    "type": "timeseries",
+                    "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+                    "targets": [
+                        {
+                            "rawSql": "SELECT dd.full_date AS time, a.total_revenue AS value FROM agg_daily_orders a JOIN dim_date dd ON dd.date_key = a.date_key ORDER BY dd.full_date;",
+                            "format": "time_series",
+                        }
+                    ],
+                },
+                {
+                    "title": "Customer Segment Revenue Distribution",
+                    "type": "piechart",
+                    "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+                    "targets": [
+                        {
+                            "rawSql": "SELECT dc.customer_segment AS metric, SUM(fo.net_amount) AS value FROM dim_customers dc JOIN fact_orders fo ON fo.customer_key = dc.customer_key GROUP BY dc.customer_segment;",
+                            "format": "table",
+                        }
+                    ],
+                },
+            ],
+            "refresh": "1m",
+            "schemaVersion": 38,
+        },
+        "overwrite": True,
+    }
+
+    filepath = os.path.join(output_dir, "grafana_bi_dashboard.json")
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(grafana_dashboard, f, indent=2)
+    logger.info("Exported Grafana open-source dashboard model: %s", filepath)
+
+    # Optional auto-sync if Grafana API key is configured
+    if GRAFANA_API_KEY:
+        try:
+            import requests
+            headers = {"Authorization": f"Bearer {GRAFANA_API_KEY}", "Content-Type": "application/json"}
+            resp = requests.post(f"{GRAFANA_URL}/api/dashboards/db", headers=headers, json=grafana_dashboard, timeout=10)
+            if resp.ok:
+                logger.info("Successfully published dashboard to Grafana server.")
+            else:
+                logger.warning("Grafana API sync returned: %s", resp.text)
+        except Exception as e:
+            logger.warning("Could not sync to Grafana API: %s", e)
+
+    return filepath
+
+
 def upload_to_tableau():
-    """Upload datasets to Tableau via REST API."""
+    """Upload datasets to Tableau via REST API (Commercial BI)."""
     import requests
 
     if not TABLEAU_SERVER:
@@ -242,7 +430,7 @@ def upload_to_tableau():
 
 
 def upload_to_looker():
-    """Upload datasets to Looker via API."""
+    """Upload datasets to Looker via API (Commercial BI)."""
     import requests
 
     if not LOOKER_API_URL:
@@ -259,13 +447,13 @@ def upload_to_looker():
             timeout=30,
         )
         auth_resp.raise_for_status()
-        logger.info("Authenticated with Looker. Connect Looker to Snowflake directly for best results.")
+        logger.info("Authenticated with Looker. Connect Looker to warehouse directly for best results.")
     except Exception as e:
         logger.error("Looker auth error: %s", e)
 
 
 def upload_to_power_bi():
-    """Push datasets to Power BI via REST API."""
+    """Push datasets to Power BI via REST API (Commercial BI)."""
     import requests
 
     if not POWER_BI_WORKSPACE_ID:
@@ -311,6 +499,8 @@ def upload_to_power_bi():
 
 if __name__ == "__main__":
     export_warehouse_data()
+    export_to_apache_superset()
+    export_to_grafana()
     upload_to_tableau()
     upload_to_looker()
     upload_to_power_bi()

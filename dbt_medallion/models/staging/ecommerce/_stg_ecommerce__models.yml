@@ -1,0 +1,51 @@
+version: 2
+
+sources:
+  - name: ecommerce
+    database: raw_db
+    schema: raw_source
+    tables:
+      - name: raw_orders
+        description: "Raw transactions extracted from OLTP MySQL orders table."
+        freshness:
+          warn_after: {count: 12, period: hour}
+          error_after: {count: 24, period: hour}
+        loaded_at_field: updated_at
+      - name: raw_customers
+        description: "Raw customer profile extracts."
+
+models:
+  - name: stg_ecommerce__orders
+    description: "Normalized and typed staging model for orders."
+    columns:
+      - name: order_id
+        description: "Primary key identifier for the order."
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: "Foreign key referencing customers."
+        tests:
+          - not_null
+      - name: order_amount
+        description: "Total order amount in USD."
+        tests:
+          - not_null
+      - name: order_status
+        description: "Current lifecycle state of the order."
+        tests:
+          - accepted_values:
+              values: ['pending', 'completed', 'cancelled', 'refunded']
+
+  - name: stg_ecommerce__customers
+    description: "Normalized and cleansed staging model for customer accounts."
+    columns:
+      - name: customer_id
+        description: "Primary key identifier for the customer."
+        tests:
+          - unique
+          - not_null
+      - name: email_address
+        description: "Sanitized lowercase email address."
+        tests:
+          - not_null
