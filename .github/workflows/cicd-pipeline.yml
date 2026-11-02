@@ -83,7 +83,7 @@ jobs:
       - name: Validate Compose Stack Definitions
         run: |
           docker compose config --quiet
-          docker compose -f docker-compose.yaml -f docker-compose.lite.yaml config --quiet
+          docker compose -f docker-compose.lite.yaml config --quiet
           docker compose -f docker-compose.ci.yaml config --quiet
           echo "All Docker Compose configurations validated."
 

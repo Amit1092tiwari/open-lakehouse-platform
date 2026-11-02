@@ -66,7 +66,7 @@ def train_and_log_model(features_df=None):
         mlflow.sklearn.log_model(model, "linear_regression_model")
         logger.info("[OUTPUT RECEIVED] Model artifact logged to MLflow | MSE: %.4f | R2: %.4f", mse, r2)
 
-    return model, mse, r2
+    return {"mse": mse, "r2": r2}
 
 
 if __name__ == "__main__":
