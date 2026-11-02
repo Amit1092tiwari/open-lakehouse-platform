@@ -45,6 +45,7 @@ PG_PASSWORD = os.getenv("POSTGRES_PASSWORD", "pipeline_secret_2024")
 DUCKDB_PATH = os.getenv("DUCKDB_PATH", ":memory:")
 
 _IN_MEMORY_FALLBACK_CONN: Optional[sqlite3.Connection] = None
+_DUCKDB_CONN: Optional[Any] = None
 
 
 def get_postgres_connection():
@@ -68,9 +69,13 @@ def get_postgres_connection():
 
 def get_duckdb_connection():
     """Create a connection to the DuckDB open-source columnar analytics engine."""
-    global _IN_MEMORY_FALLBACK_CONN
+    global _IN_MEMORY_FALLBACK_CONN, _DUCKDB_CONN
     try:
         import duckdb
+        if DUCKDB_PATH == ":memory:":
+            if _DUCKDB_CONN is None:
+                _DUCKDB_CONN = duckdb.connect(database=":memory:", read_only=False)
+            return _DUCKDB_CONN
         conn = duckdb.connect(database=DUCKDB_PATH, read_only=False)
         logger.info("[OUTPUT RECEIVED] Connected to DuckDB open-source columnar engine at: %s", DUCKDB_PATH)
         return conn
@@ -124,7 +129,7 @@ def execute_sql(sql: str, params: Optional[Any] = None, engine_type: Optional[st
             conn.rollback()
         raise
     finally:
-        if conn is not _IN_MEMORY_FALLBACK_CONN:
+        if conn is not _IN_MEMORY_FALLBACK_CONN and conn is not _DUCKDB_CONN:
             conn.close()
 
 
@@ -151,7 +156,7 @@ def execute_multi(sql_statements: List[str], engine_type: Optional[str] = None):
             conn.rollback()
         raise
     finally:
-        if conn is not _IN_MEMORY_FALLBACK_CONN:
+        if conn is not _IN_MEMORY_FALLBACK_CONN and conn is not _DUCKDB_CONN:
             conn.close()
 
 
@@ -172,7 +177,7 @@ def query_to_dataframe(sql: str, params: Optional[Any] = None, engine_type: Opti
         logger.error("Open-source warehouse query error: %s", str(e))
         raise
     finally:
-        if conn is not _IN_MEMORY_FALLBACK_CONN:
+        if conn is not _IN_MEMORY_FALLBACK_CONN and conn is not _DUCKDB_CONN:
             conn.close()
 
 
@@ -247,7 +252,7 @@ def load_dataframe(
             conn.rollback()
         raise
     finally:
-        if conn is not _IN_MEMORY_FALLBACK_CONN:
+        if conn is not _IN_MEMORY_FALLBACK_CONN and conn is not _DUCKDB_CONN:
             conn.close()
 
 
@@ -294,7 +299,7 @@ def stage_and_copy(
             conn.rollback()
         raise
     finally:
-        if conn is not _IN_MEMORY_FALLBACK_CONN:
+        if conn is not _IN_MEMORY_FALLBACK_CONN and conn is not _DUCKDB_CONN:
             conn.close()
 
 
@@ -305,7 +310,7 @@ def check_connection(engine_type: Optional[str] = None) -> bool:
         cursor = conn.cursor()
         cursor.execute("SELECT 1")
         res = cursor.fetchone()
-        if conn is not _IN_MEMORY_FALLBACK_CONN:
+        if conn is not _IN_MEMORY_FALLBACK_CONN and conn is not _DUCKDB_CONN:
             conn.close()
         logger.info("[OUTPUT RECEIVED] Open-source warehouse connectivity check passed (result=%s).", res)
         return True
