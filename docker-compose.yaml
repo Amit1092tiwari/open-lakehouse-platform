@@ -215,7 +215,7 @@ services:
   # OBJECT STORAGE
   # ============================================================
   minio:
-    image: quay.io/minio/minio:RELEASE.2024-01-16T16-07-38Z
+    image: pgsty/silo:latest
     container_name: minio
     restart: unless-stopped
     logging:
@@ -251,7 +251,7 @@ services:
       - pipeline-network
 
   minio-init:
-    image: quay.io/minio/mc:RELEASE.2024-01-16T16-06-34Z
+    image: pgsty/mc:latest
     container_name: minio-init
     depends_on:
       minio:
