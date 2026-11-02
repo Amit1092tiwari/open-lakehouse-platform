@@ -215,7 +215,7 @@ services:
   # OBJECT STORAGE
   # ============================================================
   minio:
-    image: pgsty/silo:latest
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
     container_name: minio
     restart: unless-stopped
     logging:
@@ -251,7 +251,7 @@ services:
       - pipeline-network
 
   minio-init:
-    image: pgsty/mc:latest
+    image: pgsty/mc:RELEASE.2026-10-26T00-00-00Z
     container_name: minio-init
     depends_on:
       minio:

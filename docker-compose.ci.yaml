@@ -93,7 +93,7 @@ services:
       retries: 3
 
   minio:
-    image: pgsty/silo:latest
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
     environment:
       MINIO_ROOT_USER: minioci
       MINIO_ROOT_PASSWORD: minioci_secret
