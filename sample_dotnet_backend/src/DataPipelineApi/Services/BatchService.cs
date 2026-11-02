@@ -9,30 +9,54 @@ using Microsoft.Extensions.Options;
 using DataPipelineApi.Options;
 
 namespace DataPipelineApi.Services;
+
 public class BatchService : IBatchService
 {
     private readonly HttpClient _http;
     private readonly AirflowOptions _options;
+
     public BatchService(HttpClient http, IOptions<AirflowOptions> opt)
     {
         _http = http;
         _options = opt.Value;
-        if (_http.BaseAddress is null)
+        if (_http.BaseAddress is null && !string.IsNullOrWhiteSpace(_options.BaseUrl))
             _http.BaseAddress = new Uri(_options.BaseUrl);
 
         var tok = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_options.Username}:{_options.Password}"));
         _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", tok);
     }
+
     public async Task<string> TriggerBatchAsync(CancellationToken cancellationToken)
     {
         var id = $"batch_{DateTime.UtcNow:yyyyMMddHHmmss}";
-        var resp = await _http.PostAsJsonAsync($"/dags/{_options.BatchDagId}/dagRuns", new { dag_run_id = id }, cancellationToken);
+        var resp = await _http.PostAsJsonAsync($"/api/v1/dags/{_options.BatchDagId}/dagRuns", new { dag_run_id = id }, cancellationToken);
+        if (!resp.IsSuccessStatusCode)
+        {
+            resp = await _http.PostAsJsonAsync($"/dags/{_options.BatchDagId}/dagRuns", new { dag_run_id = id }, cancellationToken);
+        }
         resp.EnsureSuccessStatusCode();
         return id;
     }
+
+    public async Task<string> TriggerWarehouseTransformAsync(CancellationToken cancellationToken)
+    {
+        var id = $"warehouse_{DateTime.UtcNow:yyyyMMddHHmmss}";
+        var resp = await _http.PostAsJsonAsync($"/api/v1/dags/{_options.WarehouseDagId}/dagRuns", new { dag_run_id = id }, cancellationToken);
+        if (!resp.IsSuccessStatusCode)
+        {
+            resp = await _http.PostAsJsonAsync($"/dags/{_options.WarehouseDagId}/dagRuns", new { dag_run_id = id }, cancellationToken);
+        }
+        resp.EnsureSuccessStatusCode();
+        return id;
+    }
+
     public async Task<string> GetBatchStatusAsync(string runId, CancellationToken cancellationToken)
     {
-        var r = await _http.GetAsync($"/dags/{_options.BatchDagId}/dagRuns/{runId}", cancellationToken);
+        var r = await _http.GetAsync($"/api/v1/dags/{_options.BatchDagId}/dagRuns/{runId}", cancellationToken);
+        if (!r.IsSuccessStatusCode)
+        {
+            r = await _http.GetAsync($"/dags/{_options.BatchDagId}/dagRuns/{runId}", cancellationToken);
+        }
         r.EnsureSuccessStatusCode();
         return await r.Content.ReadAsStringAsync(cancellationToken);
     }

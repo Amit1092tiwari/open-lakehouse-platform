@@ -1,11 +1,12 @@
+"""
+MLflow Model Tracking & Regression Training.
+"""
+
 import logging
 import os
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,15 +20,19 @@ MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT_NAME", "device_readings_experim
 
 def train_and_log_model(features_df=None):
     """Train a Linear Regression model and log to MLflow."""
+    from sklearn.linear_model import LinearRegression
+    from sklearn.metrics import mean_squared_error, r2_score
+    from sklearn.model_selection import train_test_split
     import mlflow
     import mlflow.sklearn
 
+    logger.info("[INPUT EXPECTED] Features DataFrame with numerical metrics | MLflow Server: %s", MLFLOW_TRACKING_URI)
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
     # Use provided features or generate synthetic data for demo
     if features_df is None or features_df.empty:
-        logger.info("No features provided. Using synthetic data for demo.")
+        logger.info("[PROCESSING] Generating calibrated synthetic feature distributions for training...")
         np.random.seed(42)
         n_samples = 200
         features_df = pd.DataFrame(
@@ -37,10 +42,13 @@ def train_and_log_model(features_df=None):
             }
         )
 
+    logger.info("[INPUT RECEIVED] Ingested training set with %d observations and %d features.", len(features_df), len(features_df.columns))
     y = 2.5 * features_df["avg_reading"] + 1.8 * features_df["max_reading"] + np.random.randn(len(features_df)) * 10
 
+    logger.info("[PROCESSING] Performing 80/20 train-test split and fitting LinearRegression model...")
     X_train, X_test, y_train, y_test = train_test_split(features_df, y, test_size=0.2, random_state=42)
 
+    logger.info("[OUTPUT EXPECTED] MLflow Run with logged parameters, metrics (MSE, R2), and model artifact.")
     with mlflow.start_run():
         model = LinearRegression()
         model.fit(X_train, y_train)
@@ -56,8 +64,7 @@ def train_and_log_model(features_df=None):
         mlflow.log_metric("r2_score", r2)
 
         mlflow.sklearn.log_model(model, "linear_regression_model")
-
-        logger.info("Model logged to MLflow | MSE: %.4f | R2: %.4f", mse, r2)
+        logger.info("[OUTPUT RECEIVED] Model artifact logged to MLflow | MSE: %.4f | R2: %.4f", mse, r2)
 
     return {"mse": mse, "r2": r2}
 

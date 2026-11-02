@@ -2,6 +2,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using DataPipelineApi.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace DataPipelineApi.Controllers;
 
@@ -26,16 +28,16 @@ public class WarehouseController : ControllerBase
         _config = config;
     }
 
-    /// <summary>Trigger the Snowflake warehouse transformation DAG</summary>
+    /// <summary>Trigger the Snowflake/Postgres warehouse transformation DAG</summary>
     [HttpPost("transform")]
     public async Task<ActionResult> TriggerTransform(CancellationToken ct)
     {
-        var runId = await _airflow.TriggerBatchAsync(ct);
+        var runId = await _airflow.TriggerWarehouseTransformAsync(ct);
         _logger.LogInformation("Warehouse transform triggered: {RunId}", runId);
         return Ok(new
         {
             runId,
-            message = "Snowflake warehouse transformation DAG triggered",
+            message = "Warehouse transformation DAG triggered",
             target = IsSnowflakeConfigured() ? "snowflake" : "postgresql_fallback"
         });
     }
@@ -46,19 +48,20 @@ public class WarehouseController : ControllerBase
     {
         try
         {
-            await _db.ExecutePostgresAsync("SELECT 1", ct);
+            const string sql = "SELECT date_key, total_orders, total_revenue, avg_order_value, unique_customers, max_order_value, min_order_value, updated_at FROM agg_daily_orders ORDER BY date_key DESC LIMIT 30";
+            var rows = await _db.QueryPostgresAsync(sql, null, ct);
             return Ok(new
             {
                 source = IsSnowflakeConfigured() ? "snowflake" : "postgresql",
-                message = "Query warehouse via Snowflake SQL or /swagger for API access",
-                snowflake_table = "PIPELINE_DB.ANALYTICS.AGG_DAILY_ORDERS",
-                postgres_table = "agg_daily_orders"
+                table = "agg_daily_orders",
+                count = rows.Count,
+                data = rows
             });
         }
         catch (System.Exception ex)
         {
-            _logger.LogError(ex, "Failed to query warehouse");
-            return StatusCode(503, new { error = "Warehouse database unavailable" });
+            _logger.LogError(ex, "Failed to query warehouse daily orders aggregation");
+            return StatusCode(503, new { error = "Warehouse database unavailable", message = ex.Message });
         }
     }
 
@@ -68,18 +71,20 @@ public class WarehouseController : ControllerBase
     {
         try
         {
-            await _db.ExecutePostgresAsync("SELECT 1", ct);
+            const string sql = "SELECT dag_id, run_id, run_type, start_time, end_time, duration_seconds, status FROM fact_pipeline_runs ORDER BY start_time DESC LIMIT 20";
+            var rows = await _db.QueryPostgresAsync(sql, null, ct);
             return Ok(new
             {
                 source = IsSnowflakeConfigured() ? "snowflake" : "postgresql",
-                snowflake_table = "PIPELINE_DB.ANALYTICS.FACT_PIPELINE_RUNS",
-                postgres_table = "fact_pipeline_runs"
+                table = "fact_pipeline_runs",
+                count = rows.Count,
+                data = rows
             });
         }
         catch (System.Exception ex)
         {
             _logger.LogError(ex, "Failed to query pipeline runs");
-            return StatusCode(503, new { error = "Warehouse database unavailable" });
+            return StatusCode(503, new { error = "Warehouse database unavailable", message = ex.Message });
         }
     }
 
@@ -116,6 +121,29 @@ public class WarehouseController : ControllerBase
                 warehouse = "unknown"
             });
         }
+    }
+
+    /// <summary>Get open-source warehouse status (PostgreSQL OLAP / DuckDB)</summary>
+    [HttpGet("status")]
+    public ActionResult GetWarehouseStatus()
+    {
+        return Ok(new
+        {
+            engine = "OpenSource_PostgreSQL_DuckDB",
+            is_open_source = true,
+            storage_format = "Columnar_Star_Schema",
+            tables = new
+            {
+                dimensions = new[] { "dim_customers", "dim_date", "dim_products", "dim_devices" },
+                facts = new[] { "fact_orders", "fact_sensor_readings", "fact_pipeline_runs" },
+                aggregations = new[] { "agg_daily_orders", "agg_hourly_sensors" }
+            },
+            commercial_extension = new
+            {
+                name = "Snowflake",
+                configured = IsSnowflakeConfigured()
+            }
+        });
     }
 
     /// <summary>Get Snowflake warehouse configuration status</summary>

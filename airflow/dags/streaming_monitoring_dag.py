@@ -2,9 +2,12 @@ import logging
 import os
 from datetime import datetime, timedelta
 
-from airflow.operators.python import PythonOperator
-
-from airflow import DAG
+try:
+    from airflow.operators.python import PythonOperator
+    from airflow import DAG
+    AIRFLOW_AVAILABLE = True
+except ImportError:
+    AIRFLOW_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -99,29 +102,30 @@ def check_kafka_consumer_lag(**kwargs):
 default_args = {
     "owner": "data-engineering",
     "depends_on_past": False,
+    "email_on_failure": False,
+    "email_on_retry": False,
     "retries": 1,
     "retry_delay": timedelta(minutes=2),
     "start_date": datetime(2024, 1, 1),
 }
 
-with DAG(
-    dag_id="streaming_monitoring_dag",
-    default_args=default_args,
-    description="Monitor Kafka streaming health and consumer lag",
-    schedule="*/15 * * * *",
-    catchup=False,
-    tags=["streaming", "monitoring"],
-) as dag:
-    health_check = PythonOperator(
-        task_id="check_kafka_health",
-        python_callable=check_kafka_health,
-        execution_timeout=timedelta(minutes=5),
-    )
+if AIRFLOW_AVAILABLE:
+    with DAG(
+        dag_id="streaming_monitoring_dag",
+        default_args=default_args,
+        description="Monitor Kafka broker and consumer lag",
+        schedule="*/15 * * * *",
+        catchup=False,
+        tags=["streaming", "monitoring"],
+    ) as dag:
+        kafka_health_task = PythonOperator(
+            task_id="check_kafka_health",
+            python_callable=check_kafka_health,
+        )
 
-    lag_check = PythonOperator(
-        task_id="check_kafka_consumer_lag",
-        python_callable=check_kafka_consumer_lag,
-        execution_timeout=timedelta(minutes=5),
-    )
+        consumer_lag_task = PythonOperator(
+            task_id="check_consumer_lag",
+            python_callable=check_kafka_consumer_lag,
+        )
 
-    health_check >> lag_check
+        kafka_health_task >> consumer_lag_task

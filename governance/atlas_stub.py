@@ -1,3 +1,7 @@
+"""
+Apache Atlas Metadata & Data Lineage Integration.
+"""
+
 import json
 import logging
 import os
@@ -31,9 +35,9 @@ def check_dataset_exists(dataset_name):
             data = response.json()
             exists = bool(data.get("entities"))
             if exists:
-                logger.info("Dataset '%s' exists in Atlas.", dataset_name)
+                logger.info("[OUTPUT RECEIVED] Dataset '%s' exists in Atlas catalog.", dataset_name)
             else:
-                logger.warning("Dataset '%s' not found in Atlas.", dataset_name)
+                logger.warning("[OUTPUT RECEIVED] Dataset '%s' not found in Atlas catalog.", dataset_name)
             return exists
         logger.error("Atlas API error: %d - %s", response.status_code, response.text)
         return False
@@ -44,8 +48,10 @@ def check_dataset_exists(dataset_name):
 
 def register_dataset_lineage(source_name, target_name, extra_info=None):
     """Register dataset lineage in Apache Atlas."""
+    logger.info("[INPUT EXPECTED] Lineage nodes: Source='%s' -> Target='%s'", source_name, target_name)
+    logger.info("[PROCESSING] Verifying entity registration in Atlas before constructing lineage edge...")
     if not check_dataset_exists(source_name) or not check_dataset_exists(target_name):
-        logger.error("Cannot register lineage: source or target not found.")
+        logger.error("Cannot register lineage: source or target not found in Atlas.")
         return False
 
     payload = {
@@ -60,6 +66,7 @@ def register_dataset_lineage(source_name, target_name, extra_info=None):
         ],
     }
 
+    logger.info("[OUTPUT EXPECTED] Destination: Apache Atlas API endpoint %s/entities", ATLAS_API_URL)
     try:
         response = requests.post(
             f"{ATLAS_API_URL}/entities",
@@ -69,7 +76,7 @@ def register_dataset_lineage(source_name, target_name, extra_info=None):
             timeout=10,
         )
         if response.status_code in (200, 201):
-            logger.info("Lineage registered: '%s' -> '%s'", source_name, target_name)
+            logger.info("[OUTPUT RECEIVED] Lineage registered successfully: '%s' -> '%s'", source_name, target_name)
             return True
         logger.error(
             "Lineage registration failed: %d - %s",

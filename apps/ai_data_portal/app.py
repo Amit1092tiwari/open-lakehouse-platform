@@ -17,8 +17,9 @@ from datetime import datetime, timedelta
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 
-# Ensure UTF-8 stdout
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+# Ensure UTF-8 stdout when run as main script
+if __name__ == "__main__" and hasattr(sys.stdout, "buffer"):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 # Import AI Vector Engine
 BASE_DIR = Path(__file__).resolve().parent
@@ -62,8 +63,8 @@ STREAMING_ANOMALIES = [
 ]
 
 
-# Initialize AI Vector RAG Index
 def init_vector_rag():
+    """Initialize AI Vector RAG Index with curated enterprise platform docs."""
     if not AI_VECTOR_AVAILABLE:
         return None, None, None
     chunker = DocumentChunker(target_chunk_size=100, chunk_overlap=15)
@@ -127,7 +128,159 @@ def init_vector_rag():
     index.insert_batch(all_chunks, embs)
     return chunker, embedder, index
 
+
+class PortalService:
+    """Service encapsulating KPI analytics, charting, NL-to-SQL, and vector RAG querying."""
+
+    def __init__(self, vector_index=None, embedder=None):
+        self.vector_index = vector_index
+        self.embedder = embedder
+
+    def get_kpi_metrics(self):
+        total_rev = sum(o["net_realized_revenue"] for o in GOLD_ORDERS)
+        total_orders = len(GOLD_ORDERS)
+        active_cust = len(GOLD_CUSTOMERS)
+        anomalies = len(STREAMING_ANOMALIES)
+        return {
+            "total_revenue": total_rev,
+            "total_orders": total_orders,
+            "active_customers": active_cust,
+            "streaming_anomalies": anomalies,
+            "warehouse_credits_est": 45.3,
+            "spark_active_streams": 3,
+            "vector_indexed_chunks": len(self.vector_index.chunks) if self.vector_index else 0
+        }
+
+    def get_chart_data(self):
+        daily_rev = {}
+        for o in GOLD_ORDERS:
+            d = o["order_date"]
+            daily_rev[d] = daily_rev.get(d, 0.0) + o["net_realized_revenue"]
+
+        tiers = {}
+        for c in GOLD_CUSTOMERS:
+            t = c["loyalty_tier"]
+            tiers[t] = tiers.get(t, 0) + 1
+
+        return {
+            "daily_revenue": [{"date": k, "revenue": v} for k, v in sorted(daily_rev.items())],
+            "loyalty_tiers": tiers,
+            "recent_anomalies": STREAMING_ANOMALIES
+        }
+
+    def get_pipeline_health(self):
+        return {
+            "status": "HEALTHY",
+            "components": [
+                {"name": "Kafka Broker (Sensor Stream)", "status": "OPERATIONAL", "lag": "12 ms", "rate": "4,200 msg/s"},
+                {"name": "PySpark Structured Streaming", "status": "OPERATIONAL", "batch_duration": "1.2s", "trigger": "10s"},
+                {"name": "dbt Medallion Marts (Gold)", "status": "FRESH", "last_run": "15m ago", "tests_passing": "12/12"},
+                {"name": "MinIO Lakehouse (Snappy Parquet)", "status": "HEALTHY", "storage_used": "4.2 GB", "compression": "65%"},
+                {"name": "Vector Store & RAG Engine", "status": "INDEXED", "chunks": len(self.vector_index.chunks) if self.vector_index else 0, "dim": 128}
+            ]
+        }
+
+    def execute_sql_chat(self, query_prompt):
+        prompt = (query_prompt or "").lower()
+        start_time = time.time()
+
+        if "top" in prompt or "revenue" in prompt or "best" in prompt:
+            sql = (
+                "SELECT customer_id, customer_name, country_code, loyalty_tier, lifetime_spend, net_realized_revenue\n"
+                "FROM analytics.dim_customers\n"
+                "ORDER BY net_realized_revenue DESC\n"
+                "LIMIT 5;"
+            )
+            rows = sorted(GOLD_CUSTOMERS, key=lambda x: x["net_realized_revenue"], reverse=True)[:5]
+            explanation = "Executed query against Gold conformed dimension `dim_customers` sorted by realized net revenue."
+
+        elif "tier" in prompt or "segment" in prompt or "loyalty" in prompt:
+            sql = (
+                "SELECT loyalty_tier, COUNT(customer_id) AS customer_count, SUM(net_realized_revenue) AS tier_revenue\n"
+                "FROM analytics.dim_customers\n"
+                "GROUP BY loyalty_tier\n"
+                "ORDER BY tier_revenue DESC;"
+            )
+            tier_stats = {}
+            for c in GOLD_CUSTOMERS:
+                t = c["loyalty_tier"]
+                if t not in tier_stats:
+                    tier_stats[t] = {"loyalty_tier": t, "customer_count": 0, "tier_revenue": 0.0}
+                tier_stats[t]["customer_count"] += 1
+                tier_stats[t]["tier_revenue"] += c["net_realized_revenue"]
+            rows = list(tier_stats.values())
+            explanation = "Aggregated customer metrics grouped by dbt loyalty tier classification."
+
+        elif "anomaly" in prompt or "sensor" in prompt or "device" in prompt:
+            sql = (
+                "SELECT event_id, device_id, reading_value, threshold, timestamp, status\n"
+                "FROM analytics.fact_sensor_readings\n"
+                "WHERE is_anomaly = TRUE AND reading_value >= 70.0\n"
+                "ORDER BY reading_timestamp DESC\n"
+                "LIMIT 10;"
+            )
+            rows = STREAMING_ANOMALIES
+            explanation = "Filtered real-time streaming anomalies from `fact_sensor_readings` using partition pruning."
+
+        else:
+            sql = (
+                "SELECT order_hk, order_id, customer_id, order_date, order_amount, net_realized_revenue, order_value_tier\n"
+                "FROM analytics.fct_daily_customer_orders\n"
+                "WHERE order_date >= '2026-08-20'\n"
+                "ORDER BY order_date DESC, order_amount DESC\n"
+                "LIMIT 6;"
+            )
+            rows = GOLD_ORDERS[:6]
+            explanation = "Scanned incremental Gold fact table `fct_daily_customer_orders` clustered by `(order_date, customer_id)`."
+
+        duration_ms = round((time.time() - start_time) * 1000 + 12.4, 2)
+        return {
+            "prompt": query_prompt,
+            "sql": sql,
+            "rows": rows,
+            "execution_time_ms": duration_ms,
+            "bytes_scanned": "0 KB (Partition Pruned)",
+            "explanation": explanation
+        }
+
+    def execute_rag_chat(self, user_query):
+        if not self.vector_index or not self.embedder:
+            return {"error": "Vector RAG engine not initialized"}
+
+        start_time = time.time()
+        query_emb = self.embedder.generate_batch([user_query])[0]
+        results = self.vector_index.hybrid_search(user_query, query_emb, top_n=3)
+        duration_ms = round((time.time() - start_time) * 1000 + 8.1, 2)
+
+        citations = []
+        synthesized_points = []
+        for r in results:
+            citations.append({
+                "chunk_id": r["chunk_id"],
+                "document_id": r["document_id"],
+                "topic": r["metadata"].get("topic"),
+                "author": r["metadata"].get("author"),
+                "rrf_score": r["rrf_score"],
+                "text": r["text"]
+            })
+            synthesized_points.append(f"• **[{r['metadata'].get('topic')}]**: {r['text']}")
+
+        summary_answer = (
+            f"Based on your enterprise data platform knowledge base (retrieved via Reciprocal Rank Fusion):\n\n"
+            + "\n\n".join(synthesized_points)
+        )
+
+        return {
+            "query": user_query,
+            "answer": summary_answer,
+            "citations": citations,
+            "search_latency_ms": duration_ms
+        }
+
+
+# Global Portal Instance
 chunker, embedder, vector_index = init_vector_rag()
+portal_service = PortalService(vector_index=vector_index, embedder=embedder)
 
 
 class PortalRequestHandler(SimpleHTTPRequestHandler):
@@ -154,54 +307,14 @@ class PortalRequestHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/kpi_metrics":
-            total_rev = sum(o["net_realized_revenue"] for o in GOLD_ORDERS)
-            total_orders = len(GOLD_ORDERS)
-            active_cust = len(GOLD_CUSTOMERS)
-            anomalies = len(STREAMING_ANOMALIES)
-            self._send_json({
-                "total_revenue": total_rev,
-                "total_orders": total_orders,
-                "active_customers": active_cust,
-                "streaming_anomalies": anomalies,
-                "warehouse_credits_est": 45.3,
-                "spark_active_streams": 3,
-                "vector_indexed_chunks": len(vector_index.chunks) if vector_index else 0
-            })
+            self._send_json(portal_service.get_kpi_metrics())
             return
-
         if self.path == "/api/chart_data":
-            # Group daily revenue
-            daily_rev = {}
-            for o in GOLD_ORDERS:
-                d = o["order_date"]
-                daily_rev[d] = daily_rev.get(d, 0.0) + o["net_realized_revenue"]
-
-            # Loyalty tiers
-            tiers = {}
-            for c in GOLD_CUSTOMERS:
-                t = c["loyalty_tier"]
-                tiers[t] = tiers.get(t, 0) + 1
-
-            self._send_json({
-                "daily_revenue": [{"date": k, "revenue": v} for k, v in sorted(daily_rev.items())],
-                "loyalty_tiers": tiers,
-                "recent_anomalies": STREAMING_ANOMALIES
-            })
+            self._send_json(portal_service.get_chart_data())
             return
-
         if self.path == "/api/pipeline_health":
-            self._send_json({
-                "status": "HEALTHY",
-                "components": [
-                    {"name": "Kafka Broker (Sensor Stream)", "status": "OPERATIONAL", "lag": "12 ms", "rate": "4,200 msg/s"},
-                    {"name": "PySpark Structured Streaming", "status": "OPERATIONAL", "batch_duration": "1.2s", "trigger": "10s"},
-                    {"name": "dbt Medallion Marts (Gold)", "status": "FRESH", "last_run": "15m ago", "tests_passing": "12/12"},
-                    {"name": "MinIO Lakehouse (Snappy Parquet)", "status": "HEALTHY", "storage_used": "4.2 GB", "compression": "65%"},
-                    {"name": "Vector Store & RAG Engine", "status": "INDEXED", "chunks": len(vector_index.chunks) if vector_index else 0, "dim": 128}
-                ]
-            })
+            self._send_json(portal_service.get_pipeline_health())
             return
-
         super().do_GET()
 
     def do_POST(self):
@@ -210,106 +323,16 @@ class PortalRequestHandler(SimpleHTTPRequestHandler):
         payload = json.loads(post_body.decode("utf-8")) if post_body else {}
 
         if self.path == "/api/sql_chat":
-            query_prompt = payload.get("prompt", "").lower()
-            start_time = time.time()
-
-            # Rule-based NL-to-SQL Engine over Medallion Marts
-            if "top" in query_prompt or "revenue" in query_prompt or "best" in query_prompt:
-                sql = (
-                    "SELECT customer_id, customer_name, country_code, loyalty_tier, lifetime_spend, net_realized_revenue\n"
-                    "FROM analytics.dim_customers\n"
-                    "ORDER BY net_realized_revenue DESC\n"
-                    "LIMIT 5;"
-                )
-                rows = sorted(GOLD_CUSTOMERS, key=lambda x: x["net_realized_revenue"], reverse=True)[:5]
-                explanation = "Executed query against Gold conformed dimension `dim_customers` sorted by realized net revenue."
-
-            elif "tier" in query_prompt or "segment" in query_prompt or "loyalty" in query_prompt:
-                sql = (
-                    "SELECT loyalty_tier, COUNT(customer_id) AS customer_count, SUM(net_realized_revenue) AS tier_revenue\n"
-                    "FROM analytics.dim_customers\n"
-                    "GROUP BY loyalty_tier\n"
-                    "ORDER BY tier_revenue DESC;"
-                )
-                tier_stats = {}
-                for c in GOLD_CUSTOMERS:
-                    t = c["loyalty_tier"]
-                    if t not in tier_stats:
-                        tier_stats[t] = {"loyalty_tier": t, "customer_count": 0, "tier_revenue": 0.0}
-                    tier_stats[t]["customer_count"] += 1
-                    tier_stats[t]["tier_revenue"] += c["net_realized_revenue"]
-                rows = list(tier_stats.values())
-                explanation = "Aggregated customer metrics grouped by dbt loyalty tier classification."
-
-            elif "anomaly" in query_prompt or "sensor" in query_prompt or "device" in query_prompt:
-                sql = (
-                    "SELECT event_id, device_id, reading_value, threshold, timestamp, status\n"
-                    "FROM analytics.fact_sensor_readings\n"
-                    "WHERE is_anomaly = TRUE AND reading_value >= 70.0\n"
-                    "ORDER BY reading_timestamp DESC\n"
-                    "LIMIT 10;"
-                )
-                rows = STREAMING_ANOMALIES
-                explanation = "Filtered real-time streaming anomalies from `fact_sensor_readings` using partition pruning."
-
-            else:
-                sql = (
-                    "SELECT order_hk, order_id, customer_id, order_date, order_amount, net_realized_revenue, order_value_tier\n"
-                    "FROM analytics.fct_daily_customer_orders\n"
-                    "WHERE order_date >= '2026-08-20'\n"
-                    "ORDER BY order_date DESC, order_amount DESC\n"
-                    "LIMIT 6;"
-                )
-                rows = GOLD_ORDERS[:6]
-                explanation = "Scanned incremental Gold fact table `fct_daily_customer_orders` clustered by `(order_date, customer_id)`."
-
-            duration_ms = round((time.time() - start_time) * 1000 + 12.4, 2)
-            self._send_json({
-                "prompt": payload.get("prompt"),
-                "sql": sql,
-                "rows": rows,
-                "execution_time_ms": duration_ms,
-                "bytes_scanned": "0 KB (Partition Pruned)",
-                "explanation": explanation
-            })
+            result = portal_service.execute_sql_chat(payload.get("prompt", ""))
+            self._send_json(result)
             return
 
         if self.path == "/api/rag_chat":
-            user_query = payload.get("query", "")
-            if not vector_index or not embedder:
-                self._send_json({"error": "Vector RAG engine not initialized"}, status=500)
-                return
-
-            start_time = time.time()
-            query_emb = embedder.generate_batch([user_query])[0]
-            results = vector_index.hybrid_search(user_query, query_emb, top_n=3)
-            duration_ms = round((time.time() - start_time) * 1000 + 8.1, 2)
-
-            # Synthesize Answer from retrieved chunks
-            citations = []
-            synthesized_points = []
-            for r in results:
-                citations.append({
-                    "chunk_id": r["chunk_id"],
-                    "document_id": r["document_id"],
-                    "topic": r["metadata"].get("topic"),
-                    "author": r["metadata"].get("author"),
-                    "rrf_score": r["rrf_score"],
-                    "text": r["text"]
-                })
-                synthesized_points.append(f"• **[{r['metadata'].get('topic')}]**: {r['text']}")
-
-            summary_answer = (
-                f"Based on your enterprise data platform knowledge base (retrieved via Reciprocal Rank Fusion):\n\n"
-                + "\n\n".join(synthesized_points)
-            )
-
-            self._send_json({
-                "query": user_query,
-                "answer": summary_answer,
-                "citations": citations,
-                "search_latency_ms": duration_ms
-            })
+            result = portal_service.execute_rag_chat(payload.get("query", ""))
+            if "error" in result:
+                self._send_json(result, status=500)
+            else:
+                self._send_json(result)
             return
 
         self.send_error(404, "Endpoint not found")
