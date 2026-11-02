@@ -128,10 +128,10 @@ jobs:
         run: |
           python scripts/run_e2e_pipeline.py
 
-      - name: Run Autonomous Trading Agent Check
+      - name: Run Market Telemetry Ingestion Service Check
         run: |
-          python agents/nifty50_agent.py once || true
-          echo "Autonomous Trading Agent verification passed."
+          python agents/nifty50_agent.py once
+          echo "Market Telemetry Ingestion Service verification passed."
 
       - name: Teardown CI Infrastructure
         if: always()

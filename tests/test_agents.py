@@ -1,4 +1,4 @@
-"""Unit tests for Autonomous Agents (Nifty NSE Market Ingestion Agent)."""
+"""Unit tests for Market Telemetry Ingestion Agent (Nifty NSE Market Ingestion)."""
 
 import os
 import sys
