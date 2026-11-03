@@ -27,7 +27,7 @@ jobs:
 
       - name: Run code formatting & style checks
         run: |
-          black --check --line-length=120 storage/ ai_vector_pipeline/ apps/ agents/ tests/ warehouse/ || true
+          black --check --line-length=120 storage/ ai_vector_pipeline/ apps/ tests/ warehouse/ || true
           flake8 --max-line-length=120 --ignore=E501,W503,E203 storage/ warehouse/ tests/ || true
 
   unit-tests:
@@ -50,7 +50,7 @@ jobs:
           pip install -r requirements.txt || true
           pip install pytest pyyaml pandas requests
 
-      - name: Execute Pytest Suite (95 Tests)
+      - name: Execute Pytest Suite
         run: |
           python -m pytest tests/ -v --tb=short
 
@@ -127,11 +127,6 @@ jobs:
       - name: Execute End-to-End Live Pipeline Runner
         run: |
           python scripts/run_e2e_pipeline.py
-
-      - name: Run Market Telemetry Ingestion Service Check
-        run: |
-          python agents/nifty50_agent.py once
-          echo "Market Telemetry Ingestion Service verification passed."
 
       - name: Teardown CI Infrastructure
         if: always()

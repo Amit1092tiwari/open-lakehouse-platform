@@ -592,7 +592,7 @@ flowchart TD
 ---
 
 ### 13. Financial Market Scraper & Analytics Pipeline
-- **Module Files:** `scripts/indian_stock_market_scraper.py` & `agents/nifty50_agent.py`
+- **Module Files:** `scripts/indian_stock_market_scraper.py`
 - **Expected Input:**
   - NSE Nifty 50 and Indian equity market ticker symbols (e.g., `^NSEI`, `RELIANCE.NS`, `TCS.NS`).
 - **Received Input:**
@@ -634,11 +634,6 @@ flowchart TD
 ## Project Directory Structure
 
 ```
-├── agents/                               # Financial Intelligence & Telemetry Agents
-│   ├── config.py                         # Agent configurations & index parameters
-│   ├── nifty50_agent.py                  # Real-time NSE Nifty 50 streaming agent
-│   ├── requirements.txt                  # Agent dependencies
-│   └── README.md                         # Agent documentation
 ├── airflow/                              # Apache Airflow Orchestration
 │   ├── Dockerfile
 │   ├── requirements.txt
@@ -722,7 +717,7 @@ flowchart TD
 │   └── monitoring.py                     # Health probes
 ├── helm/e2e-pipeline/                    # Helm chart for Kubernetes deployment
 ├── terraform/                            # Infrastructure as Code
-├── tests/                                # Comprehensive Test Suite (95 Tests)
+├── tests/                                # Comprehensive Test Suite
 │   ├── test_opensource_stack.py          # Open-source warehouse, Superset, Grafana, MinIO
 │   ├── test_snowflake.py                 # Snowflake fallback routing & DDL
 │   ├── test_warehouse_sql.py             # Star-schema integrity & tables
@@ -736,8 +731,7 @@ flowchart TD
 │   ├── test_ai_vector_pipeline.py        # Vector embeddings & hybrid search
 │   ├── test_data_validation.py           # Great Expectations rules
 │   ├── test_kafka_producer.py            # Kafka event generator
-│   ├── test_ml_and_governance.py         # Atlas & MLflow integrations
-│   └── test_agents.py                    # Financial market scraper agent
+│   └── test_ml_and_governance.py         # Atlas & MLflow integrations
 ├── .github/workflows/
 │   └── cicd-pipeline.yml                 # Reactivated GitHub Actions CI/CD pipeline
 ├── docker-compose.yaml                   # 20 Container Services
@@ -816,9 +810,6 @@ make trigger-warehouse
 # Start the AI Data Portal (NL-to-SQL & RAG Assistant):
 python apps/ai_data_portal/app.py
 
-# Run real-time Nifty 50 market agent:
-python agents/nifty50_agent.py
-
 # Run end-to-end integration test runner:
 python scripts/run_e2e_pipeline.py
 ```
@@ -859,9 +850,8 @@ tests/test_ai_vector_pipeline.py ....................... [ 3 passed]
 tests/test_data_validation.py .......................... [ 4 passed]
 tests/test_kafka_producer.py ........................... [ 2 passed]
 tests/test_ml_and_governance.py ........................ [ 2 passed, 1 skipped]
-tests/test_agents.py ................................... [ 4 passed]
 
-================== 90 passed, 5 skipped, 0 failed in 2.76s ====================
+================== 86 passed, 5 skipped, 0 failed in 2.65s ====================
 ```
 *(The 5 skipped tests are guarded integrations that gracefully skip when optional external local server daemons, such as a live Spark cluster or Airflow daemon, are not actively running).*
 

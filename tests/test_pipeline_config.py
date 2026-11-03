@@ -72,10 +72,9 @@ def test_dbt_medallion_exists():
     assert os.path.exists(os.path.join(dbt_dir, "models", "marts"))
 
 
-def test_ai_vector_and_agent_modules_exist():
-    """Verify AI vector pipeline, agents, and portal files exist."""
+def test_ai_vector_and_portal_modules_exist():
+    """Verify AI vector pipeline and portal files exist."""
     assert os.path.exists(os.path.join(ROOT, "ai_vector_pipeline", "vector_ingestion_engine.py"))
-    assert os.path.exists(os.path.join(ROOT, "agents", "nifty50_agent.py"))
     assert os.path.exists(os.path.join(ROOT, "apps", "ai_data_portal", "app.py"))
 
 
