@@ -77,3 +77,10 @@ def test_ai_vector_and_agent_modules_exist():
     assert os.path.exists(os.path.join(ROOT, "ai_vector_pipeline", "vector_ingestion_engine.py"))
     assert os.path.exists(os.path.join(ROOT, "agents", "nifty50_agent.py"))
     assert os.path.exists(os.path.join(ROOT, "apps", "ai_data_portal", "app.py"))
+
+
+def test_security_options_and_kraft_compose_exist():
+    """Verify security configuration, middleware, and KRaft mode compose exist."""
+    assert os.path.exists(os.path.join(ROOT, "docker-compose.kraft.yaml"))
+    assert os.path.exists(os.path.join(ROOT, "sample_dotnet_backend", "src", "DataPipelineApi", "Security", "ApiKeyAuthMiddleware.cs"))
+    assert os.path.exists(os.path.join(ROOT, "sample_dotnet_backend", "src", "DataPipelineApi", "Options", "SecurityOptions.cs"))

@@ -23,6 +23,16 @@ def test_spark_batch_job_exports():
     assert "main" in functions
 
 
+def test_spark_batch_job_iceberg_config():
+    """Verify spark_batch_job has Apache Iceberg lakehouse configurations."""
+    batch_job_path = os.path.join(SPARK_DIR, "spark_batch_job.py")
+    with open(batch_job_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "ENABLE_ICEBERG" in content
+    assert "ICEBERG_CATALOG" in content
+    assert "ICEBERG_WAREHOUSE" in content
+
+
 def test_spark_streaming_job_exports():
     """Verify spark_streaming_job has required parsing, anomaly filter, and sink functions."""
     stream_job_path = os.path.join(SPARK_DIR, "spark_streaming_job.py")

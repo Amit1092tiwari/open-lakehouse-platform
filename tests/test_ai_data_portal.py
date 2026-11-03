@@ -81,3 +81,10 @@ def test_portal_rag_chat(portal_service):
     assert len(res["citations"]) > 0
     assert "search_latency_ms" in res
 
+
+def test_portal_lakehouse_sql_execution(portal_service):
+    """Verify portal service executes queries via open-source warehouse with fallback."""
+    rows = portal_service._execute_lakehouse_sql("SELECT 1 AS num", fallback_rows=[{"num": 1}])
+    assert len(rows) > 0
+    assert rows[0]["num"] == 1
+

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DataPipelineApi.HealthChecks;
 using DataPipelineApi.Options;
+using DataPipelineApi.Security;
 using DataPipelineApi.Services;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -32,6 +33,7 @@ try
     builder.Services.AddOptions<AtlasOptions>().Bind(builder.Configuration.GetSection("Atlas")).ValidateDataAnnotations().ValidateOnStart();
     builder.Services.AddOptions<MLflowOptions>().Bind(builder.Configuration.GetSection("MLflow")).ValidateDataAnnotations().ValidateOnStart();
     builder.Services.AddOptions<GitHubOptions>().Bind(builder.Configuration.GetSection("GitHub")).ValidateDataAnnotations().ValidateOnStart();
+    builder.Services.AddOptions<SecurityOptions>().Bind(builder.Configuration.GetSection(SecurityOptions.SectionName));
 
     // Retry policy
     var retryPolicy = HttpPolicyExtensions.HandleTransientHttpError()
@@ -146,6 +148,29 @@ try
             Description = "Enterprise-grade API for orchestrating batch ingestion, streaming, data governance, ML pipelines, and warehouse operations.",
             Contact = new OpenApiContact { Name = "Data Engineering Team" }
         });
+
+        c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.ApiKey,
+            Name = "X-API-Key",
+            In = ParameterLocation.Header,
+            Description = "Enter your API key in the X-API-Key header to authorize."
+        });
+
+        c.AddSecurityRequirement(new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "ApiKey"
+                    }
+                },
+                Array.Empty<string>()
+            }
+        });
     });
 
     var app = builder.Build();
@@ -196,6 +221,9 @@ try
             await next();
         }
     });
+
+    // API Gateway Security Middleware
+    app.UseMiddleware<ApiKeyAuthMiddleware>();
 
     app.UseRouting();
     app.MapControllers();

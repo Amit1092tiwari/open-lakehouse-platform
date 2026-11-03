@@ -93,3 +93,12 @@ def test_nifty_agent_run_once_mocked(mock_urlopen):
         assert result is True
         assert agent.csv_file.exists()
 
+
+def test_nifty_agent_publish_to_lakehouse():
+    """Verify market telemetry publishing to lakehouse handles empty and valid payloads gracefully."""
+    agent = NiftyNSEAgent()
+    assert agent.publish_to_lakehouse(None) is False
+    assert agent.publish_to_lakehouse({}) is False
+    test_data = {"index_name": "NIFTY 50", "current_value": "24,500.00", "timestamp": "2026-11-03 12:00:00"}
+    assert agent.publish_to_lakehouse(test_data) is True
+

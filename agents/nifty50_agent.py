@@ -146,6 +146,62 @@ class NiftyNSEAgent:
             logger.error(f"Error saving CSV: {e}")
             return False
 
+    def publish_to_lakehouse(self, data):
+        """Publish market telemetry snapshot to MinIO S3 lakehouse and/or Kafka topic."""
+        if not data:
+            return False
+
+        # 1. MinIO Object Storage Staging
+        minio_endpoint = os.getenv("MINIO_ENDPOINT")
+        if minio_endpoint:
+            try:
+                import boto3
+
+                access_key = os.getenv("MINIO_ROOT_USER", "minio")
+                secret_key = os.getenv("MINIO_ROOT_PASSWORD", "minio_secret_2024")
+                bucket = os.getenv("MINIO_BUCKET_RAW", "raw-data")
+                s3 = boto3.client(
+                    "s3",
+                    endpoint_url=minio_endpoint,
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                    region_name="us-east-1",
+                )
+                try:
+                    s3.head_bucket(Bucket=bucket)
+                except Exception:
+                    s3.create_bucket(Bucket=bucket)
+
+                now = datetime.now()
+                date_str = now.strftime("%Y-%m-%d")
+                time_str = now.strftime("%H%M%S")
+                key = f"market_telemetry/date={date_str}/nifty_{time_str}.json"
+                payload = json.dumps(data, indent=2).encode("utf-8")
+                s3.put_object(Bucket=bucket, Key=key, Body=payload)
+                logger.info("✓ Staged market telemetry to MinIO lakehouse: s3://%s/%s", bucket, key)
+            except Exception as e:
+                logger.debug("Optional MinIO staging skipped: %s", e)
+
+        # 2. Kafka Event Stream Publishing
+        kafka_broker = os.getenv("KAFKA_BROKER")
+        if kafka_broker:
+            try:
+                from kafka import KafkaProducer
+
+                producer = KafkaProducer(
+                    bootstrap_servers=[kafka_broker],
+                    value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+                    request_timeout_ms=3000,
+                )
+                producer.send("market_telemetry", data)
+                producer.flush(timeout=2)
+                producer.close()
+                logger.info("✓ Streamed market telemetry to Kafka topic 'market_telemetry'")
+            except Exception as e:
+                logger.debug("Optional Kafka stream dispatch skipped: %s", e)
+
+        return True
+
     def run_once(self):
         """Single execution"""
         logger.info("=" * 60)
@@ -157,6 +213,7 @@ class NiftyNSEAgent:
             parsed_data = self.parse_nifty_data(raw_data)
             if parsed_data:
                 self.save_to_csv(parsed_data)
+                self.publish_to_lakehouse(parsed_data)
                 logger.info("Ingestion completed successfully")
                 return True
         return False

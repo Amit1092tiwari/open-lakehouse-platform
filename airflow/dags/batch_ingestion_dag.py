@@ -142,11 +142,32 @@ def load_to_postgres(**kwargs):
     """)
     pg_hook.run("TRUNCATE TABLE orders_transformed")
 
-    if not os.path.exists(ORDERS_TRANSFORMED_PATH):
-        logger.warning("Transformed file not found: %s", ORDERS_TRANSFORMED_PATH)
-        return 0
+    df = None
+    # 1. Attempt reading from MinIO S3 processed bucket directly
+    minio_bucket_processed = os.getenv("MINIO_BUCKET_PROCESSED", "processed-data")
+    try:
+        import boto3
+        import io
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=MINIO_ENDPOINT,
+            aws_access_key_id=MINIO_ACCESS_KEY,
+            aws_secret_access_key=MINIO_SECRET_KEY,
+            region_name="us-east-1",
+        )
+        obj = s3.get_object(Bucket=minio_bucket_processed, Key="orders_transformed.csv")
+        df = pd.read_csv(io.BytesIO(obj["Body"].read()))
+        logger.info("[INPUT RECEIVED] Loaded transformed dataset directly from MinIO S3 bucket '%s'.", minio_bucket_processed)
+    except Exception as s3_err:
+        logger.debug("Direct MinIO read skipped (%s). Checking local staging path.", s3_err)
 
-    df = pd.read_csv(ORDERS_TRANSFORMED_PATH)
+    # 2. Fall back to local staging file
+    if df is None or df.empty:
+        if os.path.exists(ORDERS_TRANSFORMED_PATH):
+            df = pd.read_csv(ORDERS_TRANSFORMED_PATH)
+        else:
+            logger.warning("Transformed file not found locally or in MinIO: %s", ORDERS_TRANSFORMED_PATH)
+            return 0
     if df.empty:
         logger.warning("[INPUT RECEIVED] Zero records found in transformed extract.")
         return 0

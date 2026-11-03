@@ -25,12 +25,20 @@ if __name__ == "__main__" and hasattr(sys.stdout, "buffer"):
 BASE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BASE_DIR.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "ai_vector_pipeline"))
+sys.path.insert(0, str(REPO_ROOT / "warehouse"))
+sys.path.insert(0, str(REPO_ROOT))
 
 try:
     from vector_ingestion_engine import DocumentChunker, EmbeddingGenerator, HybridVectorIndex
     AI_VECTOR_AVAILABLE = True
 except ImportError:
     AI_VECTOR_AVAILABLE = False
+
+try:
+    from warehouse import warehouse_connector
+    WAREHOUSE_CONNECTOR_AVAILABLE = True
+except ImportError:
+    WAREHOUSE_CONNECTOR_AVAILABLE = False
 
 
 # In-Memory Gold Data Marts (Mocked from dbt Medallion fct_daily_customer_orders & dim_customers)
@@ -132,9 +140,39 @@ def init_vector_rag():
 class PortalService:
     """Service encapsulating KPI analytics, charting, NL-to-SQL, and vector RAG querying."""
 
-    def __init__(self, vector_index=None, embedder=None):
+    def __init__(self, vector_index=None, embedder=None, enable_lakehouse_sync=True):
         self.vector_index = vector_index
         self.embedder = embedder
+        if enable_lakehouse_sync and WAREHOUSE_CONNECTOR_AVAILABLE:
+            self._warmup_lakehouse_engine()
+
+    def _warmup_lakehouse_engine(self):
+        """Warm up in-process DuckDB columnar warehouse with Gold Medallion models if empty."""
+        try:
+            import pandas as pd
+            df_check = warehouse_connector.query_to_dataframe(
+                "SELECT table_name FROM information_schema.tables WHERE table_name = 'dim_customers'",
+                engine_type="duckdb",
+            )
+            if df_check.empty:
+                warehouse_connector.load_dataframe(pd.DataFrame(GOLD_CUSTOMERS), "dim_customers", engine_type="duckdb", overwrite=False)
+                warehouse_connector.load_dataframe(pd.DataFrame(GOLD_ORDERS), "fct_daily_customer_orders", engine_type="duckdb", overwrite=False)
+                warehouse_connector.load_dataframe(pd.DataFrame(STREAMING_ANOMALIES), "fact_sensor_readings", engine_type="duckdb", overwrite=False)
+        except Exception:
+            pass
+
+    def _execute_lakehouse_sql(self, sql_query, fallback_rows):
+        """Execute analytical query against DuckDB / open-source warehouse with graceful fallback."""
+        if not WAREHOUSE_CONNECTOR_AVAILABLE:
+            return fallback_rows
+        try:
+            cleaned_sql = sql_query.replace("analytics.", "").replace("ANALYTICS.", "")
+            df = warehouse_connector.query_to_dataframe(cleaned_sql, engine_type="duckdb")
+            if df is not None and not df.empty:
+                return df.to_dict(orient="records")
+        except Exception:
+            pass
+        return fallback_rows
 
     def get_kpi_metrics(self):
         total_rev = sum(o["net_realized_revenue"] for o in GOLD_ORDERS)
@@ -191,7 +229,8 @@ class PortalService:
                 "ORDER BY net_realized_revenue DESC\n"
                 "LIMIT 5;"
             )
-            rows = sorted(GOLD_CUSTOMERS, key=lambda x: x["net_realized_revenue"], reverse=True)[:5]
+            default_rows = sorted(GOLD_CUSTOMERS, key=lambda x: x["net_realized_revenue"], reverse=True)[:5]
+            rows = self._execute_lakehouse_sql(sql, default_rows)
             explanation = "Executed query against Gold conformed dimension `dim_customers` sorted by realized net revenue."
 
         elif "tier" in prompt or "segment" in prompt or "loyalty" in prompt:
@@ -208,7 +247,8 @@ class PortalService:
                     tier_stats[t] = {"loyalty_tier": t, "customer_count": 0, "tier_revenue": 0.0}
                 tier_stats[t]["customer_count"] += 1
                 tier_stats[t]["tier_revenue"] += c["net_realized_revenue"]
-            rows = list(tier_stats.values())
+            default_rows = list(tier_stats.values())
+            rows = self._execute_lakehouse_sql(sql, default_rows)
             explanation = "Aggregated customer metrics grouped by dbt loyalty tier classification."
 
         elif "anomaly" in prompt or "sensor" in prompt or "device" in prompt:
@@ -219,7 +259,7 @@ class PortalService:
                 "ORDER BY reading_timestamp DESC\n"
                 "LIMIT 10;"
             )
-            rows = STREAMING_ANOMALIES
+            rows = self._execute_lakehouse_sql(sql, STREAMING_ANOMALIES)
             explanation = "Filtered real-time streaming anomalies from `fact_sensor_readings` using partition pruning."
 
         else:
@@ -230,7 +270,7 @@ class PortalService:
                 "ORDER BY order_date DESC, order_amount DESC\n"
                 "LIMIT 6;"
             )
-            rows = GOLD_ORDERS[:6]
+            rows = self._execute_lakehouse_sql(sql, GOLD_ORDERS[:6])
             explanation = "Scanned incremental Gold fact table `fct_daily_customer_orders` clustered by `(order_date, customer_id)`."
 
         duration_ms = round((time.time() - start_time) * 1000 + 12.4, 2)

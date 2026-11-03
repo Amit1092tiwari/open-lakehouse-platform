@@ -618,11 +618,12 @@ flowchart TD
 - **Received Input:**
   - JSON request bodies (`BatchRequest`, `StreamingRequest`) or query parameters.
 - **List of Processing Going Through:**
-  1. Request ID correlation and Serilog structured logging.
-  2. Polly resilience policies (3x exponential backoff).
-  3. Dapper micro-ORM querying against PostgreSQL open-source warehouse.
-  4. Airflow REST API integration triggering ETL DAGs.
-  5. Health check aggregator inspecting database, broker, object store, and cache connectivity.
+  1. API Gateway security enforcement via `ApiKeyAuthMiddleware` (`X-API-Key` & Bearer auth) and Swagger authorization integration.
+  2. Request ID correlation and Serilog structured logging.
+  3. Polly resilience policies (3x exponential backoff).
+  4. Dapper micro-ORM querying against PostgreSQL open-source warehouse.
+  5. Airflow REST API integration triggering ETL DAGs.
+  6. Health check aggregator inspecting database, broker, object store, and cache connectivity.
 - **Expected Output:**
   - JSON responses with standard status codes (200 OK, 503 Service Unavailable).
 - **Received Output:**
@@ -740,6 +741,7 @@ flowchart TD
 ├── .github/workflows/
 │   └── cicd-pipeline.yml                 # Reactivated GitHub Actions CI/CD pipeline
 ├── docker-compose.yaml                   # 20 Container Services
+├── docker-compose.kraft.yaml             # Kafka KRaft Mode (ZooKeeper-less profile)
 ├── Makefile                              # Automation build and operation commands
 ├── requirements.txt                      # Python dependencies (DuckDB, SQLAlchemy, Pytest)
 └── README.md                             # Comprehensive platform documentation

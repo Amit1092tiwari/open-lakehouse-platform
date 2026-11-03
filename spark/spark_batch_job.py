@@ -34,6 +34,9 @@ PROCESSED_PARQUET_PATH = os.getenv("PROCESSED_PARQUET_PATH", "s3a://processed-da
 PROCESSED_CSV_PATH = os.getenv("PROCESSED_CSV_PATH", "s3a://processed-data/orders_transformed.csv")
 LOCAL_OUTPUT_DIR = os.getenv("LOCAL_OUTPUT_DIR", "/tmp/transformed_orders")
 LOCAL_OUTPUT_FILE = os.getenv("LOCAL_OUTPUT_FILE", "/tmp/transformed_orders.csv")
+ENABLE_ICEBERG = os.getenv("ENABLE_ICEBERG", "false").lower() == "true"
+ICEBERG_CATALOG = os.getenv("ICEBERG_CATALOG", "lakehouse")
+ICEBERG_WAREHOUSE = os.getenv("ICEBERG_WAREHOUSE", "s3a://processed-data/iceberg_warehouse")
 
 
 def validate_distributed_data(df):
@@ -86,7 +89,7 @@ def main():
     spark = None
     try:
         logger.info("[INPUT EXPECTED] Location: %s | Format: CSV (header=true) | Schema: order_id (int), customer_id (int), amount (double)", RAW_DATA_PATH)
-        spark = (
+        builder = (
             SparkSession.builder.appName("ProductionBatchETL")
             .config("spark.hadoop.fs.s3a.endpoint", MINIO_ENDPOINT)
             .config("spark.hadoop.fs.s3a.access.key", MINIO_ACCESS_KEY)
@@ -95,8 +98,15 @@ def main():
             .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
             .config("spark.sql.parquet.compression.codec", "snappy")
             .config("spark.sql.adaptive.enabled", "true")
-            .getOrCreate()
         )
+        if ENABLE_ICEBERG:
+            builder = (
+                builder.config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+                .config(f"spark.sql.catalog.{ICEBERG_CATALOG}", "org.apache.iceberg.spark.SparkCatalog")
+                .config(f"spark.sql.catalog.{ICEBERG_CATALOG}.type", "hadoop")
+                .config(f"spark.sql.catalog.{ICEBERG_CATALOG}.warehouse", ICEBERG_WAREHOUSE)
+            )
+        spark = builder.getOrCreate()
 
         logger.info("[PROCESSING] Reading raw dataset from MinIO storage...")
         df = spark.read.option("header", "true").csv(RAW_DATA_PATH)
@@ -126,6 +136,16 @@ def main():
         logger.info("[OUTPUT EXPECTED] Destination: %s | Format: Snappy Parquet (Medallion Silver/Gold)", PROCESSED_PARQUET_PATH)
         df_transformed.write.mode("overwrite").parquet(PROCESSED_PARQUET_PATH)
         logger.info("[OUTPUT RECEIVED] Persisted %d records to MinIO Parquet path: %s", transformed_count, PROCESSED_PARQUET_PATH)
+
+        # 1b. Write to Apache Iceberg ACID Lakehouse Table (if enabled)
+        if ENABLE_ICEBERG:
+            try:
+                table_target = f"{ICEBERG_CATALOG}.gold.orders_transformed"
+                logger.info("[OUTPUT EXPECTED] Destination: %s | Format: Apache Iceberg ACID Table", table_target)
+                df_transformed.writeTo(table_target).createOrReplace()
+                logger.info("[OUTPUT RECEIVED] Committed ACID snapshot to Apache Iceberg table: %s", table_target)
+            except Exception as iceberg_err:
+                logger.warning("Optional Iceberg table commit skipped: %s", iceberg_err)
 
         # 2. Write CSV compatibility layer to MinIO
         logger.info("[OUTPUT EXPECTED] Destination: %s | Format: CSV Staging Layer", PROCESSED_CSV_PATH)

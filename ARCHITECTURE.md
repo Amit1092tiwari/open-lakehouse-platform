@@ -604,6 +604,7 @@ graph LR
 
 | Area | Implementation |
 |------|----------------|
+| API Authentication | API Key middleware (`X-API-Key` or `Authorization: Bearer`) secures `/api/*` endpoints with RFC 7807 problem details; Swagger UI integration |
 | Secrets management | Environment variables via `.env` file (not committed); `.env.example` for templates |
 | Network isolation | All services on a single Docker bridge network; no external exposure except mapped ports |
 | Database auth | MySQL and PostgreSQL require username/password; MinIO requires access key/secret |
