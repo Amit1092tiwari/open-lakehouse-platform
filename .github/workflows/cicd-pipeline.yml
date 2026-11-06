@@ -134,6 +134,18 @@ jobs:
         run: |
           python scripts/run_daily_test_scenarios.py
 
+      - name: Publish Test Report & Findings to GitHub Step Summary
+        if: always()
+        run: |
+          cat reports/daily_test_scenario_validation_report.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Daily Test Scenario & Findings Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-test-scenario-validation-report
+          path: reports/daily_test_scenario_validation_report.md
+
       - name: Teardown CI Infrastructure
         if: always()
         run: |
