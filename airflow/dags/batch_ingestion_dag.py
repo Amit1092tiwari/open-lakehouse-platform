@@ -125,22 +125,10 @@ def load_to_minio(**kwargs):
 
 
 def load_to_postgres(**kwargs):
-    """Load transformed data into PostgreSQL using high-throughput bulk insert."""
+    """Load transformed data into PostgreSQL using high-throughput bulk insert with atomic staging table swap."""
     logger.info("[INPUT EXPECTED] Spark transformed output: %s", ORDERS_TRANSFORMED_PATH)
     logger.info("[OUTPUT EXPECTED] Destination: PostgreSQL table 'orders_transformed'")
     from airflow.providers.postgres.hooks.postgres import PostgresHook
-
-    pg_hook = PostgresHook(postgres_conn_id="postgres_default")
-
-    pg_hook.run("""
-        CREATE TABLE IF NOT EXISTS orders_transformed (
-            order_id INT PRIMARY KEY,
-            customer_id INT,
-            amount DECIMAL(10,2),
-            processed_timestamp TIMESTAMP
-        )
-    """)
-    pg_hook.run("TRUNCATE TABLE orders_transformed")
 
     df = None
     # 1. Attempt reading from MinIO S3 processed bucket directly
@@ -173,7 +161,27 @@ def load_to_postgres(**kwargs):
         return 0
 
     logger.info("[INPUT RECEIVED] Read %d transformed records for PostgreSQL loading.", len(df))
-    logger.info("[PROCESSING] Bulk inserting %d records into PostgreSQL table 'orders_transformed'...", len(df))
+
+    pg_hook = PostgresHook(postgres_conn_id="postgres_default")
+
+    # Ensure target table and staging table exist
+    pg_hook.run("""
+        CREATE TABLE IF NOT EXISTS orders_transformed (
+            order_id INT PRIMARY KEY,
+            customer_id INT,
+            amount DECIMAL(10,2),
+            processed_timestamp TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS orders_transformed_staging (
+            order_id INT PRIMARY KEY,
+            customer_id INT,
+            amount DECIMAL(10,2),
+            processed_timestamp TIMESTAMP
+        );
+        TRUNCATE TABLE orders_transformed_staging;
+    """)
+
+    logger.info("[PROCESSING] Bulk inserting %d records into staging table...", len(df))
 
     records = [
         (
@@ -186,12 +194,21 @@ def load_to_postgres(**kwargs):
     ]
 
     pg_hook.insert_rows(
-        table="orders_transformed",
+        table="orders_transformed_staging",
         rows=records,
         target_fields=["order_id", "customer_id", "amount", "processed_timestamp"],
         commit_every=5000,
     )
-    logger.info("Bulk loaded %d records into PostgreSQL orders_transformed.", len(records))
+
+    # Atomic swap inside a transaction: target table is only replaced once staging insertion succeeds
+    pg_hook.run("""
+        BEGIN;
+        TRUNCATE TABLE orders_transformed;
+        INSERT INTO orders_transformed SELECT * FROM orders_transformed_staging;
+        COMMIT;
+    """)
+
+    logger.info("Atomically bulk loaded %d records into PostgreSQL orders_transformed.", len(records))
     return len(records)
 
 

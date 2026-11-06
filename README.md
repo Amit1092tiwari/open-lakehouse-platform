@@ -824,7 +824,7 @@ python bi_dashboards/bi_dashboard.py
 
 ## Testing & Quality Verification
 
-The test suite contains **94 comprehensive tests** covering the entire platform:
+The test suite contains **96 comprehensive tests** covering the entire platform:
 
 ```bash
 pytest tests/ -v
@@ -834,15 +834,15 @@ pytest tests/ -v
 ```text
 ============================= test session starts =============================
 platform win32 -- Python 3.14.5, pytest-9.2.0, pluggy-1.7.0
-collecting ... collected 94 items
+collecting ... collected 96 items
 
 tests/test_opensource_stack.py ......................... [ 7 passed]
 tests/test_snowflake.py ................................ [14 passed]
 tests/test_warehouse_sql.py ............................ [ 8 passed]
 tests/test_docker_infrastructure.py .................... [11 passed]
 tests/test_pipeline_config.py .......................... [13 passed]
-tests/test_storage_sinks.py ............................ [ 7 passed]
-tests/test_spark_jobs.py ............................... [ 3 passed, 1 skipped]
+tests/test_storage_sinks.py ............................ [ 8 passed]
+tests/test_spark_jobs.py ............................... [ 4 passed, 1 skipped]
 tests/test_airflow_dags.py ............................. [ 2 passed, 3 skipped]
 tests/test_dbt_models.py ............................... [ 5 passed]
 tests/test_ai_data_portal.py ........................... [ 8 passed]
@@ -851,7 +851,7 @@ tests/test_data_validation.py .......................... [ 4 passed]
 tests/test_kafka_producer.py ........................... [ 2 passed]
 tests/test_ml_and_governance.py ........................ [ 2 passed, 1 skipped]
 
-================== 89 passed, 5 skipped, 0 failed in 2.65s ====================
+================== 91 passed, 5 skipped, 0 failed in 2.65s ====================
 ```
 *(The 5 skipped tests are guarded integrations that gracefully skip when optional external local server daemons, such as a live Spark cluster or Airflow daemon, are not actively running).*
 

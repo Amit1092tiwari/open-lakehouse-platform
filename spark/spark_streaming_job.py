@@ -67,6 +67,10 @@ def parse_and_filter_stream(df_raw, schema=SENSOR_SCHEMA, anomaly_threshold=ANOM
         .withColumn("processed_at", current_timestamp())
     )
 
+    # Attach event-time watermark to bound streaming state memory when streaming
+    if hasattr(df_clean, "isStreaming") and df_clean.isStreaming:
+        df_clean = df_clean.withWatermark("reading_timestamp", "2 minutes")
+
     logger.info("[PROCESSING] Filtering anomalies with reading_value > %.1f...", anomaly_threshold)
     df_anomalies = df_clean.filter(col("reading_value") > anomaly_threshold)
     return df_clean, df_anomalies

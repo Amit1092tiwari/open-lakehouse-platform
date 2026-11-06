@@ -83,6 +83,16 @@ def test_influxdb_write_point():
     mock_write_api.write.assert_called_once()
 
 
+def test_influxdb_write_point_handles_exception():
+    """Verify write failure gracefully logs and returns False."""
+    mock_write_api = MagicMock()
+    mock_write_api.write.side_effect = RuntimeError("InfluxDB write timeout")
+    data = {"device_id": 505, "reading_value": 62.3}
+    success = write_sensor_reading_to_influx(data, mock_write_api, bucket="test_bucket", org="test_org")
+
+    assert success is False
+
+
 # ==============================================================================
 # Redis Sink Tests
 # ==============================================================================

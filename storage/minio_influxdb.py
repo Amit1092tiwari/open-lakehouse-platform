@@ -63,11 +63,15 @@ def build_influx_point(data):
 
 
 def write_sensor_reading_to_influx(data, write_api, bucket=INFLUXDB_BUCKET, org=INFLUXDB_ORG):
-    """Write a single reading point to InfluxDB write_api."""
+    """Write a single reading point to InfluxDB write_api with error isolation and type safety."""
     point = build_influx_point(data)
     if point is not None:
-        write_api.write(bucket=bucket, org=org, record=point)
-        return True
+        try:
+            write_api.write(bucket=bucket, org=org, record=point)
+            return True
+        except Exception as e:
+            logger.error("Failed to write point to InfluxDB: %s", str(e))
+            return False
     return False
 
 

@@ -47,6 +47,15 @@ def test_spark_streaming_job_exports():
     assert "main" in functions
 
 
+def test_spark_streaming_job_watermark_config():
+    """Verify spark_streaming_job has event-time watermark configuration."""
+    stream_job_path = os.path.join(SPARK_DIR, "spark_streaming_job.py")
+    with open(stream_job_path, "r", encoding="utf-8") as f:
+        content = f.read()
+    assert "withWatermark" in content
+    assert "reading_timestamp" in content
+
+
 def test_spark_batch_transform_logic_with_pyspark():
     """Verify Spark batch transformation with live SparkSession if pyspark is available."""
     try:
