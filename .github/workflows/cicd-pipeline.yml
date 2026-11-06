@@ -5,6 +5,8 @@ on:
     branches: [master, main]
   pull_request:
     branches: [master, main]
+  schedule:
+    - cron: '0 2 * * *'  # Runs daily at 02:00 UTC (07:30 IST)
   workflow_dispatch:
 
 env:
@@ -127,6 +129,10 @@ jobs:
       - name: Execute End-to-End Live Pipeline Runner
         run: |
           python scripts/run_e2e_pipeline.py
+
+      - name: Execute Daily Unique Test Scenarios Validation
+        run: |
+          python scripts/run_daily_test_scenarios.py
 
       - name: Teardown CI Infrastructure
         if: always()
