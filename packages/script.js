@@ -363,4 +363,4 @@ window.addEventListener('load', () => {
 // Console message
 console.log('%c🚀 End-to-End Data Pipeline Wiki', 'font-size: 20px; font-weight: bold; color: #4facfe;');
 console.log('%cBuilt with ❤️ for data engineers and scientists', 'font-size: 12px; color: #cbd5e1;');
-console.log('%cGitHub: https://github.com/hoangsonww/End-to-End-Data-Pipeline', 'font-size: 12px; color: #7c3aed;');
+console.log('%cGitHub: https://github.com/Amit1092tiwari/open-lakehouse-platform', 'font-size: 12px; color: #7c3aed;');

@@ -1,15 +1,17 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
-title: "End-to-End Data Pipeline"
-version: "1.0.0"
-date-released: "2025-05-25"
+title: "Open Lakehouse Platform"
+version: "2.0.0"
+date-released: "2026-11-07"
 type: software
 authors:
+  - family-names: "Tiwari"
+    given-names: "Amit"
   - family-names: "Nguyen"
     given-names: "Son"
     orcid: "https://orcid.org/0009-0002-7806-068X"
-repository-code: "https://github.com/hoangsonww/End-to-End-Data-Pipeline"
-url: "https://github.com/hoangsonww/End-to-End-Data-Pipeline"
+repository-code: "https://github.com/Amit1092tiwari/open-lakehouse-platform"
+url: "https://github.com/Amit1092tiwari/open-lakehouse-platform"
 license: "MIT"
 keywords:
   - Data Science

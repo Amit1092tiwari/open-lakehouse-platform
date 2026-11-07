@@ -11,9 +11,11 @@ keywords:
   - kafka
   - snowflake
   - mlflow
-home: https://github.com/hoangsonww/End-to-End-Data-Pipeline
+home: https://github.com/Amit1092tiwari/open-lakehouse-platform
 maintainers:
-  - name: Son Nguyen
+  - name: Amit Tiwari
+    url: https://github.com/Amit1092tiwari
+  - name: Son Nguyen (Original Author)
     url: https://github.com/hoangsonww
 
 dependencies:

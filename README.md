@@ -1,6 +1,7 @@
 # Open Lakehouse Platform (`open-lakehouse-platform`)
 
 [![Repository](https://img.shields.io/badge/GitHub-open--lakehouse--platform-181717?logo=github&logoColor=white)](https://github.com/Amit1092tiwari/open-lakehouse-platform)
+[![CI/CD](https://github.com/Amit1092tiwari/open-lakehouse-platform/actions/workflows/cicd-pipeline.yml/badge.svg)](https://github.com/Amit1092tiwari/open-lakehouse-platform/actions/workflows/cicd-pipeline.yml)
 
 [![Python](https://img.shields.io/badge/Python-3.10%20--%203.14-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![.NET](https://img.shields.io/badge/.NET_8-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
@@ -854,6 +855,22 @@ tests/test_ml_and_governance.py ........................ [ 2 passed, 1 skipped]
 ================== 91 passed, 5 skipped, 0 failed in 2.65s ====================
 ```
 *(The 5 skipped tests are guarded integrations that gracefully skip when optional external local server daemons, such as a live Spark cluster or Airflow daemon, are not actively running).*
+
+### Daily Unique Test Scenario & Boundary Validation Suite
+
+In addition to the unit test suite, the platform features **35 unique daily edge-case, boundary, and resilience scenarios** systematically evaluating **28 production scripts and pipeline modules** across all 7 architectural tiers (including zero-byte CSV guards, Kafka surge backpressure, MinIO S3 network fallbacks, atomic staging table swaps, path traversal security, and hybrid vector RRF ranking).
+
+**Run via Python:**
+```bash
+python scripts/run_daily_test_scenarios.py
+```
+
+**Run via Native PowerShell:**
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_daily_test_scenarios.ps1
+```
+
+Full scenario descriptions, inputs, results, and architectural observations are automatically compiled into [`reports/daily_test_scenario_validation_report.md`](reports/daily_test_scenario_validation_report.md) and published to GitHub Actions Step Summaries during CI runs.
 
 ---
 
