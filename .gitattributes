@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Mark Jupyter Notebooks as documentation so Python is detected as the primary language
+*.ipynb linguist-documentation
+
